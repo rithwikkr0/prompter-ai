@@ -86,7 +86,23 @@ const DEFAULT_SETTINGS: UserSettings = {
   autoEnhance: false,
   language: 'en',
   keyboardShortcut: 'Ctrl+Shift+E',
+  provider: 'gemini',
+  providerKeys: {
+    gemini: '',
+    openai: '',
+    anthropic: '',
+    groq: '',
+    openrouter: '',
+  },
+  providerModels: {
+    gemini: 'gemini-2.5-flash',
+    openai: 'gpt-4o-mini',
+    anthropic: 'claude-3-5-haiku-20241022',
+    groq: 'llama-3.3-70b-versatile',
+    openrouter: 'google/gemini-2.5-flash',
+  },
 };
+
 
 
 export const storage = {

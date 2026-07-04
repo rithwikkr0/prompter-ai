@@ -26,7 +26,17 @@ export function OnboardingPage() {
     setTestStatus('testing');
     const result = await testApiKey(apiKeyInput, 'gemini-2.5-flash');
     if (result.valid) {
-      await updateSettings({ apiKey: apiKeyInput });
+      await updateSettings({
+        apiKey: apiKeyInput,
+        provider: 'gemini',
+        providerKeys: {
+          gemini: apiKeyInput,
+          openai: '',
+          anthropic: '',
+          groq: '',
+          openrouter: '',
+        },
+      });
       setTestStatus('success');
       setTestMsg(`Connected to ${result.model} ✓`);
       setTimeout(() => setStep(2), 1200);

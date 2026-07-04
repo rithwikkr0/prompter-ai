@@ -16,7 +16,23 @@ const defaultSettings: UserSettings = {
   autoEnhance: false,
   language: 'en',
   keyboardShortcut: 'Ctrl+Shift+E',
+  provider: 'gemini',
+  providerKeys: {
+    gemini: '',
+    openrouter: '',
+    groq: '',
+    openai: '',
+    anthropic: '',
+  },
+  providerModels: {
+    gemini: 'gemini-2.5-flash',
+    openrouter: 'google/gemini-2.5-flash',
+    groq: 'llama-3.3-70b-versatile',
+    openai: 'gpt-4o-mini',
+    anthropic: 'claude-3-5-haiku-20241022',
+  },
 };
+
 
 const SettingsContext = createContext<SettingsContextValue>({
   settings: defaultSettings,
@@ -86,12 +102,19 @@ export function EnhancementProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, status: 'loading', error: null, result: null }));
     try {
       const { enhancePrompt } = await import('../ai/gemini');
+      const provider = settings.provider || 'gemini';
+      const apiKey = ((settings.providerKeys && settings.providerKeys[provider]) || settings.apiKey || '') as string;
+      const model = ((settings.providerModels && settings.providerModels[provider]) || settings.preferredModel || '') as string;
+
+
       const result = await enhancePrompt(
         state.currentPrompt,
-        settings.apiKey,
-        settings.preferredModel,
+        apiKey,
+        model,
+        provider,
       );
       setState((prev) => ({ ...prev, status: 'success', result }));
+
 
       // Auto-save to history
       const { nanoid } = await import('../utils/nanoid');

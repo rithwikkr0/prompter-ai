@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, Outlet } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles, History, LayoutTemplate, Settings, Info,
@@ -43,7 +43,7 @@ function ThemeToggle() {
   );
 }
 
-export function Layout({ children }: { children: React.ReactNode }) {
+export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { settings } = useSettings();
@@ -126,7 +126,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden relative">
+    <div className="flex w-full h-screen overflow-hidden relative">
       {/* Background orbs */}
       <div className="bg-orb w-96 h-96 -top-24 -left-24" style={{ background: '#4285F4' }} />
       <div className="bg-orb w-80 h-80 bottom-0 right-1/4 animation-delay-2000" style={{ background: '#9333EA', animationDelay: '2s' }} />
@@ -185,7 +185,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
               className="h-full"
             >
-              {children}
+              <Outlet />
             </motion.div>
           </AnimatePresence>
         </main>

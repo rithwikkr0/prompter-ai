@@ -67,8 +67,25 @@ export const UserSettingsSchema = z.object({
   autoEnhance: z.boolean().default(false),
   language: z.string().default('en'),
   keyboardShortcut: z.string().default('Ctrl+Shift+E'),
+  provider: z.string().default('gemini'),
+  providerKeys: z.record(z.string(), z.string()).default({
+    gemini: '',
+    openrouter: '',
+    groq: '',
+    openai: '',
+    anthropic: '',
+  }),
+  providerModels: z.record(z.string(), z.string()).default({
+    gemini: 'gemini-2.5-flash',
+    openrouter: 'google/gemini-2.5-flash',
+    groq: 'llama-3.3-70b-versatile',
+    openai: 'gpt-4o-mini',
+    anthropic: 'claude-3-5-haiku-20241022',
+  }),
+
 });
 export type UserSettings = z.infer<typeof UserSettingsSchema>;
+
 
 // ─── App State ────────────────────────────────────────────────────────────────
 export type EnhancementStatus = 'idle' | 'loading' | 'success' | 'error';

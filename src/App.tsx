@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { Layout } from './components/Layout';
@@ -10,46 +10,63 @@ import { SettingsPage } from './pages/Settings';
 import { AboutPage } from './pages/About';
 import { OnboardingPage } from './pages/Onboarding';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1, staleTime: 1000 * 60 * 5 } },
+});
 
-// Guard: redirect first-time users to onboarding
+// Loading spinner while storage hydrates
+function LoadingScreen() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100vw',
+        height: '100vh',
+        background: 'var(--bg-app)',
+      }}
+    >
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          border: '3px solid rgba(66,133,244,0.2)',
+          borderTopColor: '#4285F4',
+          animation: 'spin 0.7s linear infinite',
+        }}
+      />
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
+
+// Route guard — reads from context (already loaded inside providers)
 function AppRoutes() {
   const { settings, isLoaded } = useSettings();
 
-  // Don't render until settings loaded
-  if (!isLoaded) {
-    return (
-      <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg-app)' }}>
-        <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
-          style={{ borderColor: '#4285F4', borderTopColor: 'transparent' }} />
-      </div>
-    );
-  }
+  if (!isLoaded) return <LoadingScreen />;
 
-  // If no API key and onboarding not done → show onboarding
-  const needsOnboarding = !settings.apiKey && !(settings as Record<string, unknown>).onboardingDone;
+  // First-time user: no API key AND onboarding not acknowledged
+  const needsOnboarding =
+    !settings.apiKey && !(settings as Record<string, unknown>).onboardingDone;
 
   return (
     <Routes>
+      {/* Onboarding — shown before any other route for first-time users */}
       <Route path="/onboarding" element={<OnboardingPage />} />
-      {needsOnboarding ? (
-        <Route path="*" element={<Navigate to="/onboarding" replace />} />
-      ) : (
-        <Route
-          path="*"
-          element={
-            <Layout>
-              <Routes>
-                <Route path="/" element={<DashboardPage />} />
-                <Route path="/history" element={<HistoryPage />} />
-                <Route path="/templates" element={<TemplatesPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/about" element={<AboutPage />} />
-              </Routes>
-            </Layout>
-          }
-        />
-      )}
+
+      {/* Main app — Layout uses Outlet so nested routes always render */}
+      <Route element={needsOnboarding ? <Navigate to="/onboarding" replace /> : <Layout />}>
+        <Route index element={<DashboardPage />} />
+        <Route path="/history" element={<HistoryPage />} />
+        <Route path="/templates" element={<TemplatesPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/about" element={<AboutPage />} />
+        {/* Catch-all falls back to dashboard */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
     </Routes>
   );
 }
@@ -57,24 +74,29 @@ function AppRoutes() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <HashRouter>
         <SettingsProvider>
           <EnhancementProvider>
             <AppRoutes />
+
             <Toaster
               position="bottom-right"
+              richColors
               toastOptions={{
                 style: {
                   background: 'var(--bg-card)',
                   color: 'var(--text-primary)',
                   border: '1px solid var(--border)',
                   backdropFilter: 'blur(20px)',
+                  fontFamily: 'Inter, system-ui, sans-serif',
                 },
               }}
             />
-          </EnhancementProvider>
-        </SettingsProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
-  );
-}
+            </EnhancementProvider>
+          </SettingsProvider>
+        </HashRouter>
+      </QueryClientProvider>
+    );
+  }
+
+

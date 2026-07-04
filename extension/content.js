@@ -1,582 +1,991 @@
-// Prompter AI — Content Script v2.0
-// Production-ready: Injected into supported AI platforms
-// No TypeScript syntax — this is plain JavaScript (MV3 content script)
+// Prompter AI — Content Script v3.0
+// Right-Side Assistant Panel + Conversation Awareness + Full Structured Analysis
+// Plain JavaScript only — no TypeScript syntax (MV3 content script)
 
 (function () {
   'use strict';
 
-  // Prevent double-injection
   if (window.__prompterAILoaded) return;
   window.__prompterAILoaded = true;
 
-  // ─── Platform Selector Registry ──────────────────────────────────────────────
+  // ─── Persistent Panel State ─────────────────────────────────────────────────
+  // Survives panel open/close — cleared only on new enhancement
+  window.__prompterState = window.__prompterState || {
+    panelOpen: false,
+    lastResult: null,     // Full structured AI result
+    lastOriginal: '',     // Original prompt text before enhancement
+    isFavorite: false,
+    showingDiff: false,
+  };
+  var S = window.__prompterState;
+
+  // ─── Platform Config ────────────────────────────────────────────────────────
   var PLATFORMS = {
     'gemini.google.com': {
-      name: 'Google Gemini',
-      color: '#4285F4',
-      selectors: [
+      name: 'Gemini', color: '#4285F4',
+      inputSelectors: [
         'rich-textarea .ql-editor[contenteditable="true"]',
         'div.ql-editor[contenteditable="true"]',
         'textarea[data-testid="user-input"]',
         '.input-area-container textarea',
       ],
+      convUser:      ['.user-query-text', '[data-turn-role="user"] .query-text p', '.user-query .query-text'],
+      convAssistant: ['.model-response-text p', '.response-container .content-parts p', '[data-turn-role="model"] p'],
     },
     'chat.openai.com': {
-      name: 'ChatGPT',
-      color: '#10A37F',
-      selectors: [
-        '#prompt-textarea',
-        'textarea[data-testid="prompt-textarea"]',
-        'div[contenteditable="true"][data-virtualized="false"]',
-      ],
+      name: 'ChatGPT', color: '#10A37F',
+      inputSelectors: ['#prompt-textarea', 'textarea[data-testid="prompt-textarea"]'],
+      convUser:      ['[data-message-author-role="user"] .whitespace-pre-wrap'],
+      convAssistant: ['[data-message-author-role="assistant"] .markdown p'],
     },
     'chatgpt.com': {
-      name: 'ChatGPT',
-      color: '#10A37F',
-      selectors: [
-        '#prompt-textarea',
-        'textarea[data-testid="prompt-textarea"]',
-      ],
+      name: 'ChatGPT', color: '#10A37F',
+      inputSelectors: ['#prompt-textarea', 'textarea[data-testid="prompt-textarea"]'],
+      convUser:      ['[data-message-author-role="user"] .whitespace-pre-wrap'],
+      convAssistant: ['[data-message-author-role="assistant"] .markdown p'],
     },
     'claude.ai': {
-      name: 'Claude',
-      color: '#D97706',
-      selectors: [
-        'div[contenteditable="true"].ProseMirror',
-        '.ProseMirror[contenteditable="true"]',
-        'div[contenteditable="true"][data-placeholder]',
-      ],
+      name: 'Claude', color: '#D97706',
+      inputSelectors: ['.ProseMirror[contenteditable="true"]', 'div[contenteditable="true"][data-placeholder]'],
+      convUser:      ['.human-turn [data-testid="user-message"]', '.human-turn .contents p'],
+      convAssistant: ['.assistant-turn [data-testid="assistant-message"] p', '.assistant-turn .contents p'],
     },
     'www.perplexity.ai': {
-      name: 'Perplexity',
-      color: '#6366F1',
-      selectors: [
-        'textarea[placeholder]',
-        'textarea.overflow-auto',
-        'textarea[data-testid="search-input"]',
-      ],
+      name: 'Perplexity', color: '#6366F1',
+      inputSelectors: ['textarea[placeholder]', 'textarea.overflow-auto'],
+      convUser:      ['.break-anywhere'],
+      convAssistant: ['.prose p'],
     },
     'copilot.microsoft.com': {
-      name: 'Copilot',
-      color: '#0078D4',
-      selectors: [
-        'textarea[data-testid="chat-input"]',
-        '#searchbox',
-        'textarea[name="q"]',
-      ],
+      name: 'Copilot', color: '#0078D4',
+      inputSelectors: ['textarea[data-testid="chat-input"]', '#searchbox'],
+      convUser:      ['.user-message-text'],
+      convAssistant: ['.response-message-body p'],
     },
     'x.com': {
-      name: 'Grok',
-      color: '#1DA1F2',
-      selectors: [
-        'textarea[placeholder*="Grok"]',
-        'textarea[data-testid="tweetTextarea_0"]',
-      ],
+      name: 'Grok', color: '#1DA1F2',
+      inputSelectors: ['textarea[placeholder*="Grok"]', 'textarea[data-testid="tweetTextarea_0"]'],
+      convUser:      [],
+      convAssistant: [],
     },
     'grok.com': {
-      name: 'Grok',
-      color: '#1DA1F2',
-      selectors: [
-        'textarea',
-        'div[contenteditable="true"]',
-      ],
+      name: 'Grok', color: '#1DA1F2',
+      inputSelectors: ['textarea', 'div[contenteditable="true"]'],
+      convUser:      [],
+      convAssistant: [],
     },
   };
 
-  // ─── Platform Detection ──────────────────────────────────────────────────────
   var hostname = window.location.hostname;
-  var platformKey = Object.keys(PLATFORMS).find(function (k) {
-    return hostname.includes(k);
-  });
+  var platformKey = Object.keys(PLATFORMS).find(function (k) { return hostname.includes(k); });
   if (!platformKey) return;
+  var PLAT = PLATFORMS[platformKey];
 
-  var platform = PLATFORMS[platformKey];
-
-  // ─── Utility: Find Input Element ─────────────────────────────────────────────
-  function findInputElement() {
-    for (var i = 0; i < platform.selectors.length; i++) {
-      var el = document.querySelector(platform.selectors[i]);
+  // ─── Input Utilities ────────────────────────────────────────────────────────
+  function findInput() {
+    for (var i = 0; i < PLAT.inputSelectors.length; i++) {
+      var el = document.querySelector(PLAT.inputSelectors[i]);
       if (el) return el;
     }
     return null;
   }
 
-  // ─── Utility: Get Text ───────────────────────────────────────────────────────
   function getPromptText() {
-    var el = findInputElement();
+    var el = findInput();
     if (!el) {
-      // Fall back to selection
       var sel = window.getSelection();
       return sel && sel.toString().trim() ? sel.toString().trim() : '';
     }
     var tag = el.tagName.toUpperCase();
-    if (tag === 'TEXTAREA' || tag === 'INPUT') {
-      return el.value.trim();
-    }
+    if (tag === 'TEXTAREA' || tag === 'INPUT') return el.value.trim();
     return (el.innerText || el.textContent || '').trim();
   }
 
-  // ─── Utility: Set Text ───────────────────────────────────────────────────────
   function setPromptText(text) {
-    var el = findInputElement();
+    var el = findInput();
     if (!el) return false;
     var tag = el.tagName.toUpperCase();
-
     try {
       if (tag === 'TEXTAREA' || tag === 'INPUT') {
-        var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
-        if (nativeSetter && nativeSetter.set) {
-          nativeSetter.set.call(el, text);
-        } else {
-          el.value = text;
-        }
+        var setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
+        if (setter && setter.set) setter.set.call(el, text);
+        else el.value = text;
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
+        el.focus();
         return true;
       }
       if (el.getAttribute('contenteditable')) {
         el.focus();
-        // Select all and replace — works for ProseMirror and Quill
         document.execCommand('selectAll', false, null);
         document.execCommand('insertText', false, text);
         if (!(el.innerText || '').trim()) {
-          // execCommand failed, set directly
           el.innerText = text;
           el.dispatchEvent(new Event('input', { bubbles: true }));
         }
         return true;
       }
-    } catch (err) {
-      console.warn('[Prompter AI] setPromptText error:', err);
-    }
+    } catch (e) { /* silent fail */ }
     return false;
   }
 
-  // ─── Notification Toast ──────────────────────────────────────────────────────
-  var activeNotif = null;
+  // ─── Conversation Context ───────────────────────────────────────────────────
+  function getConversationContext() {
+    var parts = [];
+    var maxTurns = 8;
 
-  function showNotification(message, type) {
-    type = type || 'info';
-    if (activeNotif) activeNotif.remove();
-
-    var colors = {
-      info: '#4285F4',
-      success: '#34A853',
-      error: '#EA4335',
-      loading: '#9333EA',
-    };
-    var icons = {
-      info: 'ℹ️',
-      success: '✅',
-      error: '❌',
-      loading: '⏳',
-    };
-
-    var notif = document.createElement('div');
-    notif.id = 'prompter-notif';
-    notif.setAttribute('style', [
-      'position:fixed',
-      'top:20px',
-      'right:20px',
-      'z-index:2147483647',
-      'background:linear-gradient(135deg,#1e293b,#0f172a)',
-      'color:#f8fafc',
-      'padding:12px 16px',
-      'border-radius:14px',
-      'font-family:Inter,system-ui,sans-serif',
-      'font-size:13px',
-      'font-weight:500',
-      'box-shadow:0 8px 32px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.06)',
-      'border-left:3px solid ' + colors[type],
-      'max-width:300px',
-      'display:flex',
-      'align-items:center',
-      'gap:10px',
-      'animation:pf-slide-in 0.25s cubic-bezier(0.34,1.56,0.64,1)',
-      'backdrop-filter:blur(20px)',
-    ].join(';'));
-
-    notif.innerHTML =
-      '<style>@keyframes pf-slide-in{from{opacity:0;transform:translateX(20px) scale(0.95)}to{opacity:1;transform:translateX(0) scale(1)}}</style>' +
-      '<span style="font-size:16px;flex-shrink:0">' + icons[type] + '</span>' +
-      '<span>' + message + '</span>';
-
-    document.body.appendChild(notif);
-    activeNotif = notif;
-
-    if (type !== 'loading') {
-      setTimeout(function () {
-        if (notif.parentNode) notif.remove();
-        if (activeNotif === notif) activeNotif = null;
-      }, 4000);
+    function trySelectors(selList) {
+      for (var i = 0; i < selList.length; i++) {
+        var els = document.querySelectorAll(selList[i]);
+        if (els.length > 0) return Array.from(els);
+      }
+      return [];
     }
 
-    return notif;
+    var userEls      = trySelectors(PLAT.convUser);
+    var assistantEls = trySelectors(PLAT.convAssistant);
+
+    var len = Math.min(Math.max(userEls.length, assistantEls.length), maxTurns);
+    for (var k = 0; k < len; k++) {
+      if (userEls[k]) {
+        var ut = (userEls[k].innerText || '').trim().slice(0, 600);
+        if (ut) parts.push('User: ' + ut);
+      }
+      if (assistantEls[k]) {
+        var at = (assistantEls[k].innerText || '').trim().slice(0, 800);
+        if (at) parts.push('Assistant: ' + at);
+      }
+    }
+    return parts.join('\n\n');
   }
 
-  // ─── Diff Preview Modal ──────────────────────────────────────────────────────
-  function showDiffPreview(original, enhanced, onAccept, onReject) {
-    var overlay = document.createElement('div');
-    overlay.id = 'prompter-overlay';
-    overlay.setAttribute('style', [
-      'position:fixed',
-      'inset:0',
-      'z-index:2147483646',
-      'background:rgba(0,0,0,0.7)',
-      'backdrop-filter:blur(8px)',
-      'display:flex',
-      'align-items:center',
-      'justify-content:center',
-      'padding:20px',
-      'font-family:Inter,system-ui,sans-serif',
-    ].join(';'));
+  // ─── Notification (top-center, non-blocking) ────────────────────────────────
+  var _notif = null;
+  function showToast(msg, type) {
+    type = type || 'info';
+    if (_notif && _notif.parentNode) _notif.remove();
+    var c = { info: '#4285F4', success: '#34A853', error: '#EA4335', loading: '#9333EA' };
+    var ic = { info: 'ℹ️', success: '✅', error: '❌', loading: '⌛' };
+    var d = document.createElement('div');
+    d.id = 'pf-toast';
+    d.setAttribute('style', 'position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:2147483647;' +
+      'background:rgba(8,14,30,0.97);color:#f8fafc;padding:9px 18px;border-radius:50px;' +
+      'font-family:Inter,system-ui,sans-serif;font-size:13px;font-weight:500;' +
+      'box-shadow:0 8px 32px rgba(0,0,0,0.5);border:1px solid ' + (c[type] || c.info) + '44;' +
+      'display:flex;align-items:center;gap:8px;' +
+      'animation:pfToastIn 0.25s cubic-bezier(0.34,1.56,0.64,1)');
+    d.innerHTML = '<style>@keyframes pfToastIn{from{opacity:0;transform:translateX(-50%) scale(0.9)}to{opacity:1;transform:translateX(-50%) scale(1)}}</style>' +
+      ic[type] + ' ' + _esc(msg);
+    document.body.appendChild(d);
+    _notif = d;
+    if (type !== 'loading') {
+      setTimeout(function () {
+        if (d.parentNode) {
+          d.style.transition = 'opacity 0.2s, transform 0.2s';
+          d.style.opacity = '0';
+          d.style.transform = 'translateX(-50%) scale(0.92)';
+          setTimeout(function () { if (d.parentNode) d.remove(); }, 210);
+        }
+        if (_notif === d) _notif = null;
+      }, 3200);
+    }
+    return d;
+  }
 
-    overlay.innerHTML = [
-      '<div style="background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:24px;max-width:600px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,0.6)">',
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">',
-          '<div style="display:flex;align-items:center;gap:10px">',
-            '<div style="width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,#4285F4,#9333EA);display:flex;align-items:center;justify-content:center;font-size:18px">✨</div>',
-            '<div>',
-              '<div style="color:#f8fafc;font-size:15px;font-weight:700">Prompt Enhanced</div>',
-              '<div style="color:#94a3b8;font-size:12px">Review and accept or reject</div>',
-            '</div>',
-          '</div>',
-          '<button id="pf-close-btn" style="background:rgba(255,255,255,0.06);border:none;color:#94a3b8;width:32px;height:32px;border-radius:10px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">×</button>',
-        '</div>',
+  // ─── Helpers ────────────────────────────────────────────────────────────────
+  function _esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/\n/g,'<br>');
+  }
 
-        '<div style="margin-bottom:16px">',
-          '<div style="color:#94a3b8;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">Original</div>',
-          '<div style="background:rgba(234,67,53,0.08);border:1px solid rgba(234,67,53,0.2);border-radius:12px;padding:12px;color:#fca5a5;font-size:13px;line-height:1.6;max-height:120px;overflow-y:auto">' + escapeHtml(original) + '</div>',
-        '</div>',
+  function scoreColor(n) {
+    return n >= 70 ? '#34A853' : n >= 40 ? '#FBBC05' : '#EA4335';
+  }
 
-        '<div style="margin-bottom:20px">',
-          '<div style="color:#94a3b8;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">✨ Enhanced</div>',
-          '<div style="background:rgba(52,168,83,0.08);border:1px solid rgba(52,168,83,0.2);border-radius:12px;padding:12px;color:#86efac;font-size:13px;line-height:1.6;max-height:180px;overflow-y:auto">' + escapeHtml(enhanced) + '</div>',
-        '</div>',
+  function categoryColor(cat) {
+    var m = { coding:'#4285F4', debugging:'#EA4335', 'ai-agents':'#9333EA',
+      'image-generation':'#F59E0B', 'video-generation':'#EC4899',
+      writing:'#10B981', research:'#06B6D4', marketing:'#F97316',
+      business:'#8B5CF6', email:'#14B8A6', seo:'#84CC16', general:'#6B7280' };
+    return m[cat] || '#4285F4';
+  }
 
-        '<div style="display:flex;gap:10px">',
-          '<button id="pf-accept-btn" style="flex:1;background:linear-gradient(135deg,#4285F4,#9333EA);color:white;border:none;padding:12px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s">✅ Use Enhanced</button>',
-          '<button id="pf-copy-btn" style="background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:12px 16px;border-radius:12px;font-size:14px;cursor:pointer">📋 Copy</button>',
-          '<button id="pf-reject-btn" style="background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:12px 16px;border-radius:12px;font-size:14px;cursor:pointer">✕ Keep Original</button>',
-        '</div>',
-      '</div>',
-    ].join('');
+  function scoreRingHTML(score) {
+    var r = 22, circ = +(2 * Math.PI * r).toFixed(2);
+    var off = +(circ * (1 - score / 100)).toFixed(2);
+    var col = scoreColor(score);
+    return '<svg width="56" height="56" viewBox="0 0 56 56" style="transform:rotate(-90deg)">' +
+      '<circle cx="28" cy="28" r="' + r + '" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="4.5"/>' +
+      '<circle cx="28" cy="28" r="' + r + '" fill="none" stroke="' + col + '" stroke-width="4.5"' +
+      ' stroke-dasharray="' + circ + '" stroke-dashoffset="' + off + '"' +
+      ' stroke-linecap="round" style="transition:stroke-dashoffset 1.1s cubic-bezier(0.4,0,0.2,1)"/>' +
+      '</svg>' +
+      '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">' +
+      '<span style="font-size:15px;font-weight:800;color:' + col + ';line-height:1">' + score + '</span>' +
+      '<span style="font-size:9px;color:rgba(255,255,255,0.35);margin-top:1px">/100</span></div>';
+  }
 
-    document.body.appendChild(overlay);
+  function wordDiffHTML(orig, enh) {
+    // Mark words in enhanced that are new (not in original)
+    var origSet = new Set((orig.match(/\b\w{4,}\b/g) || []).map(function (w) { return w.toLowerCase(); }));
+    return (enh || '').split(/\b/).map(function (tok) {
+      var clean = tok.toLowerCase().replace(/[^a-z]/g, '');
+      if (clean.length >= 4 && !origSet.has(clean)) {
+        return '<mark style="background:rgba(52,168,83,0.22);color:#86efac;border-radius:3px;padding:0 2px">' + _esc(tok) + '</mark>';
+      }
+      return _esc(tok);
+    }).join('');
+  }
 
-    overlay.querySelector('#pf-close-btn').addEventListener('click', function () { overlay.remove(); onReject(); });
-    overlay.querySelector('#pf-reject-btn').addEventListener('click', function () { overlay.remove(); onReject(); });
-    overlay.querySelector('#pf-accept-btn').addEventListener('click', function () {
-      overlay.remove();
-      onAccept(enhanced);
-    });
-    overlay.querySelector('#pf-copy-btn').addEventListener('click', function () {
-      navigator.clipboard.writeText(enhanced).then(function () {
-        var btn = overlay.querySelector('#pf-copy-btn');
-        if (btn) btn.textContent = '✅ Copied!';
-        setTimeout(function () { if (btn) btn.textContent = '📋 Copy'; }, 2000);
+  // ─── Panel CSS ──────────────────────────────────────────────────────────────
+  var PANEL_CSS = '' +
+    '#pf-panel{position:fixed;top:0;right:0;bottom:0;width:390px;z-index:2147483644;' +
+    'display:flex;flex-direction:column;' +
+    'background:rgba(6,11,26,0.97);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);' +
+    'border-left:1px solid rgba(255,255,255,0.07);' +
+    'box-shadow:-12px 0 60px rgba(0,0,0,0.7),' +
+    '-2px 0 0 rgba(66,133,244,0.08);' +
+    'transform:translateX(102%);' +
+    'transition:transform 0.38s cubic-bezier(0.34,1.05,0.64,1);' +
+    'font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;overflow:hidden}' +
+
+    '#pf-panel.pf-open{transform:translateX(0)}' +
+    '#pf-panel *{box-sizing:border-box;-webkit-font-smoothing:antialiased}' +
+
+    '#pf-hdr{display:flex;align-items:center;justify-content:space-between;' +
+    'padding:13px 15px;border-bottom:1px solid rgba(255,255,255,0.05);' +
+    'background:rgba(255,255,255,0.015);flex-shrink:0}' +
+
+    '#pf-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}' +
+    '#pf-body::-webkit-scrollbar{width:3px}' +
+    '#pf-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}' +
+
+    '#pf-footer{padding:11px 14px;border-top:1px solid rgba(255,255,255,0.05);' +
+    'flex-shrink:0;background:rgba(255,255,255,0.008)}' +
+
+    '.pf-card{background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);' +
+    'border-radius:12px;padding:11px}' +
+
+    '.pf-label{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;' +
+    'color:rgba(255,255,255,0.3);margin-bottom:7px}' +
+
+    '.pf-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;' +
+    'font-size:11px;font-weight:600;margin:2px 2px}' +
+
+    '.pf-ibtn{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);' +
+    'color:rgba(255,255,255,0.55);width:28px;height:28px;border-radius:8px;cursor:pointer;' +
+    'display:inline-flex;align-items:center;justify-content:center;font-size:13px;' +
+    'transition:all 0.15s;flex-shrink:0}' +
+    '.pf-ibtn:hover{background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.18)}' +
+    '.pf-ibtn.active{background:rgba(66,133,244,0.18);border-color:rgba(66,133,244,0.35);color:#93c5fd}' +
+
+    '.pf-btn{padding:9px 14px;border-radius:10px;border:none;cursor:pointer;' +
+    'font-size:12px;font-weight:600;font-family:inherit;' +
+    'display:inline-flex;align-items:center;justify-content:center;gap:5px;' +
+    'transition:all 0.15s ease}' +
+    '.pf-btn-primary{background:linear-gradient(135deg,#3b82f6,#7c3aed);color:#fff;flex:1}' +
+    '.pf-btn-primary:hover{filter:brightness(1.12);transform:translateY(-1px);' +
+    'box-shadow:0 4px 16px rgba(59,130,246,0.35)}' +
+    '.pf-btn-secondary{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);' +
+    'color:rgba(255,255,255,0.65)}' +
+    '.pf-btn-secondary:hover{background:rgba(255,255,255,0.09);color:#fff}' +
+    '.pf-btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);' +
+    'color:rgba(255,255,255,0.4);font-size:11px;padding:7px 10px}' +
+    '.pf-btn-ghost:hover{background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7)}' +
+
+    '#pf-enhanced-ta{width:100%;min-height:120px;max-height:240px;resize:vertical;' +
+    'background:rgba(255,255,255,0.04);border:1.5px solid rgba(255,255,255,0.09);' +
+    'border-radius:9px;padding:10px;' +
+    'color:#e2e8f0;font-size:12.5px;line-height:1.65;' +
+    'font-family:inherit;outline:none}' +
+    '#pf-enhanced-ta:focus{border-color:rgba(59,130,246,0.5);' +
+    'box-shadow:0 0 0 3px rgba(59,130,246,0.08)}' +
+
+    '.pf-diff-view{width:100%;min-height:120px;max-height:240px;overflow-y:auto;' +
+    'background:rgba(255,255,255,0.04);border:1.5px solid rgba(59,130,246,0.3);' +
+    'border-radius:9px;padding:10px;' +
+    'color:#e2e8f0;font-size:12.5px;line-height:1.65;' +
+    'font-family:inherit}' +
+
+    '.pf-imp-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:7px}' +
+    '.pf-imp-icon{width:22px;height:22px;border-radius:6px;flex-shrink:0;' +
+    'background:rgba(66,133,244,0.12);display:flex;align-items:center;justify-content:center;font-size:12px}' +
+
+    '@keyframes pfSpin{to{transform:rotate(360deg)}}' +
+    '.pf-spin{animation:pfSpin 0.75s linear infinite;display:inline-block}' +
+    '@keyframes pfFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}' +
+    '.pf-fade-in{animation:pfFadeIn 0.3s ease both}';
+
+  // ─── Panel DOM ──────────────────────────────────────────────────────────────
+  var _panel = null;
+  var _enhTA  = null;   // enhanced textarea
+  var _diffView = null; // diff overlay div
+
+  function _injectCSS() {
+    if (document.getElementById('pf-styles')) return;
+    var s = document.createElement('style');
+    s.id = 'pf-styles';
+    s.textContent = PANEL_CSS;
+    (document.head || document.documentElement).appendChild(s);
+  }
+
+  function _createPanel() {
+    if (_panel) return;
+    _injectCSS();
+
+    _panel = document.createElement('div');
+    _panel.id = 'pf-panel';
+    _panel.setAttribute('role', 'complementary');
+    _panel.setAttribute('aria-label', 'Prompter AI Assistant');
+
+    _panel.innerHTML =
+      // ── Header ────────────────────────────────────────────────────────────
+      '<div id="pf-hdr">' +
+        '<div style="display:flex;align-items:center;gap:9px">' +
+          '<div style="width:28px;height:28px;border-radius:8px;' +
+            'background:linear-gradient(135deg,#4285F4,#9333EA);' +
+            'display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">✨</div>' +
+          '<div>' +
+            '<div style="color:#f1f5f9;font-size:13px;font-weight:700;line-height:1.1">Prompter AI</div>' +
+            '<span id="pf-plat-badge" style="font-size:10px;font-weight:600;padding:1px 7px;' +
+              'border-radius:10px;background:' + PLAT.color + '1a;color:' + PLAT.color + ';' +
+              'border:1px solid ' + PLAT.color + '33;display:inline-block">' + PLAT.name + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:5px">' +
+          '<button class="pf-ibtn" id="pf-diff-btn" title="Toggle diff view">⟷</button>' +
+          '<button class="pf-ibtn" id="pf-minimize-btn" title="Minimize">−</button>' +
+          '<button class="pf-ibtn" id="pf-close-btn" title="Close panel (keeps result)">×</button>' +
+        '</div>' +
+      '</div>' +
+
+      // ── Scrollable body ────────────────────────────────────────────────────
+      '<div id="pf-body">' +
+
+        // Idle state
+        '<div id="pf-idle" style="text-align:center;padding:48px 0;color:rgba(255,255,255,0.25)">' +
+          '<div style="font-size:40px;margin-bottom:14px;opacity:0.6">✨</div>' +
+          '<div style="font-size:13px;font-weight:600;margin-bottom:6px">Prompter AI Ready</div>' +
+          '<div style="font-size:11px;line-height:1.6;opacity:0.7">' +
+            'Click the ✨ button or press<br>' +
+            '<code style="background:rgba(255,255,255,0.08);padding:2px 7px;border-radius:5px;font-size:10px">Ctrl+Shift+E</code>' +
+            '<br><br>Your conversation stays fully visible.' +
+          '</div>' +
+        '</div>' +
+
+        // Loading state
+        '<div id="pf-loading" style="display:none;text-align:center;padding:48px 0;color:rgba(255,255,255,0.45)">' +
+          '<div class="pf-spin" style="font-size:30px;margin-bottom:14px">⟳</div>' +
+          '<div id="pf-loading-msg" style="font-size:13px;font-weight:600;margin-bottom:6px">Analyzing prompt...</div>' +
+          '<div style="font-size:11px;color:rgba(255,255,255,0.3)">Reading conversation context…</div>' +
+        '</div>' +
+
+        // Result state
+        '<div id="pf-result" style="display:none" class="pf-fade-in">' +
+
+          // Score + Intent
+          '<div style="display:flex;gap:12px;align-items:center;margin-bottom:2px">' +
+            '<div style="position:relative;width:56px;height:56px;flex-shrink:0" id="pf-score-ring"></div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div id="pf-intent-tag" style="margin-bottom:4px"></div>' +
+              '<div id="pf-confidence" style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:4px"></div>' +
+              '<div id="pf-explanation" style="font-size:11px;color:rgba(255,255,255,0.5);line-height:1.5"></div>' +
+            '</div>' +
+          '</div>' +
+
+          // Missing context
+          '<div id="pf-missing-card" class="pf-card" style="display:none">' +
+            '<div class="pf-label">⚠ Missing Context</div>' +
+            '<div id="pf-missing-tags"></div>' +
+          '</div>' +
+
+          // Improvements accordion
+          '<div id="pf-impr-card" class="pf-card" style="display:none">' +
+            '<div class="pf-label" id="pf-impr-toggle" style="cursor:pointer;user-select:none">' +
+              '▸ Improvements Applied — <span id="pf-impr-count">0</span>' +
+            '</div>' +
+            '<div id="pf-impr-list" style="display:none;margin-top:6px"></div>' +
+          '</div>' +
+
+          // Enhanced prompt
+          '<div class="pf-card">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+              '<div class="pf-label" style="margin:0">Enhanced Prompt</div>' +
+              '<div style="display:flex;gap:4px">' +
+                '<button class="pf-ibtn" id="pf-copy-btn" title="Copy enhanced prompt">📋</button>' +
+                '<button class="pf-ibtn" id="pf-fav-btn" title="Favorite">☆</button>' +
+              '</div>' +
+            '</div>' +
+            '<textarea id="pf-enhanced-ta" spellcheck="false" placeholder="Enhanced prompt appears here…"></textarea>' +
+          '</div>' +
+
+        '</div>' + // end #pf-result
+      '</div>' +  // end #pf-body
+
+      // ── Footer actions ─────────────────────────────────────────────────────
+      '<div id="pf-footer">' +
+        '<div style="display:flex;gap:6px;margin-bottom:6px">' +
+          '<button class="pf-btn pf-btn-primary" id="pf-replace-btn">⬆ Replace Prompt</button>' +
+          '<button class="pf-btn pf-btn-secondary" id="pf-again-btn" title="Improve again">🔄</button>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px">' +
+          '<button class="pf-btn pf-btn-ghost" style="flex:1" id="pf-save-btn">💾 Save</button>' +
+          '<button class="pf-btn pf-btn-ghost" style="flex:1" id="pf-export-btn">⬇ Export</button>' +
+        '</div>' +
+        '<div style="margin-top:8px;text-align:center;font-size:10px;color:rgba(255,255,255,0.18)">' +
+          'Ctrl+Shift+E · Right-click for more options' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(_panel);
+
+    _enhTA = document.getElementById('pf-enhanced-ta');
+
+    // ── Wire events ──────────────────────────────────────────────────────────
+    document.getElementById('pf-close-btn').addEventListener('click', _closePanel);
+    document.getElementById('pf-minimize-btn').addEventListener('click', _closePanel);
+    document.getElementById('pf-diff-btn').addEventListener('click', _toggleDiff);
+    document.getElementById('pf-copy-btn').addEventListener('click', _copyEnhanced);
+    document.getElementById('pf-fav-btn').addEventListener('click', _toggleFav);
+    document.getElementById('pf-replace-btn').addEventListener('click', _replacePrompt);
+    document.getElementById('pf-again-btn').addEventListener('click', _improveAgain);
+    document.getElementById('pf-save-btn').addEventListener('click', _saveHistory);
+    document.getElementById('pf-export-btn').addEventListener('click', _exportJSON);
+
+    var imprToggle = document.getElementById('pf-impr-toggle');
+    if (imprToggle) {
+      imprToggle.addEventListener('click', function () {
+        var list = document.getElementById('pf-impr-list');
+        if (!list) return;
+        var open = list.style.display !== 'none';
+        list.style.display = open ? 'none' : 'block';
+        var cnt = S.lastResult && S.lastResult.improvements ? S.lastResult.improvements.length : 0;
+        imprToggle.innerHTML = (open ? '▸' : '▾') + ' Improvements Applied — <span id="pf-impr-count">' + cnt + '</span>';
+      });
+    }
+
+    // Restore last result if available
+    if (S.lastResult) _showResult(S.lastResult);
+  }
+
+  function _openPanel() {
+    if (!_panel) _createPanel();
+    // Small rAF to ensure the element is in DOM before animating
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        _panel.classList.add('pf-open');
       });
     });
+    S.panelOpen = true;
   }
 
-  function escapeHtml(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/\n/g, '<br>');
+  function _closePanel() {
+    if (_panel) _panel.classList.remove('pf-open');
+    S.panelOpen = false;
+  }
+
+  // ── Panel state views ──────────────────────────────────────────────────────
+  function _setView(which) {
+    var views = { idle: '#pf-idle', loading: '#pf-loading', result: '#pf-result' };
+    Object.keys(views).forEach(function (k) {
+      var el = document.getElementById(views[k].slice(1));
+      if (el) el.style.display = k === which ? 'block' : 'none';
+    });
+  }
+
+  function _showLoading(msg) {
+    if (!_panel) _createPanel();
+    _setView('loading');
+    var m = document.getElementById('pf-loading-msg');
+    if (m && msg) m.textContent = msg;
+    _openPanel();
+  }
+
+  function _showResult(result) {
+    if (!_panel) _createPanel();
+    _setView('result');
+
+    // Score ring
+    var ring = document.getElementById('pf-score-ring');
+    if (ring && result.qualityScore !== undefined) ring.innerHTML = scoreRingHTML(result.qualityScore);
+
+    // Intent tag
+    var intentEl = document.getElementById('pf-intent-tag');
+    if (intentEl && result.intent) {
+      var col = categoryColor(result.intent.category);
+      intentEl.innerHTML = '<span class="pf-tag" style="background:' + col + '1a;color:' + col +
+        ';border:1px solid ' + col + '33">' + _esc(result.intent.label || result.intent.category) + '</span>';
+    }
+
+    // Confidence
+    var confEl = document.getElementById('pf-confidence');
+    if (confEl && result.intent) confEl.textContent = 'Confidence: ' + result.intent.confidence + '%';
+
+    // Explanation
+    var expEl = document.getElementById('pf-explanation');
+    if (expEl && result.explanation) expEl.textContent = result.explanation;
+
+    // Missing context pills
+    var missingCard = document.getElementById('pf-missing-card');
+    var missingTags = document.getElementById('pf-missing-tags');
+    if (missingCard && missingTags) {
+      if (result.missingContext && result.missingContext.length) {
+        missingCard.style.display = 'block';
+        missingTags.innerHTML = result.missingContext.map(function (m) {
+          return '<span class="pf-tag" style="background:rgba(251,188,5,0.1);color:#fde68a;' +
+            'border:1px solid rgba(251,188,5,0.2)">' + _esc(m) + '</span>';
+        }).join('');
+      } else {
+        missingCard.style.display = 'none';
+      }
+    }
+
+    // Improvements
+    var imprCard = document.getElementById('pf-impr-card');
+    var imprList = document.getElementById('pf-impr-list');
+    var imprCount = document.getElementById('pf-impr-count');
+    if (imprCard && result.improvements && result.improvements.length) {
+      imprCard.style.display = 'block';
+      if (imprCount) imprCount.textContent = result.improvements.length;
+      if (imprList) {
+        imprList.innerHTML = result.improvements.map(function (imp) {
+          return '<div class="pf-imp-row">' +
+            '<div class="pf-imp-icon">' + (imp.icon || '✓') + '</div>' +
+            '<div><div style="color:#f1f5f9;font-size:11.5px;font-weight:600;margin-bottom:2px">' +
+            _esc(imp.type) + '</div>' +
+            '<div style="color:rgba(255,255,255,0.4);font-size:11px;line-height:1.4">' +
+            _esc(imp.description) + '</div></div></div>';
+        }).join('');
+      }
+    } else if (imprCard) {
+      imprCard.style.display = 'none';
+    }
+
+    // Enhanced textarea
+    if (_enhTA) {
+      _enhTA.value = result.enhancedPrompt || '';
+      // Reset diff state
+      if (_diffView && _diffView.parentNode) { _diffView.remove(); _diffView = null; }
+      _enhTA.style.display = '';
+      var diffBtn = document.getElementById('pf-diff-btn');
+      if (diffBtn) diffBtn.classList.remove('active');
+      S.showingDiff = false;
+    }
+
+    // Restore fav state
+    var favBtn = document.getElementById('pf-fav-btn');
+    if (favBtn) favBtn.textContent = S.isFavorite ? '★' : '☆';
+
+    _openPanel();
+  }
+
+  function _showError(msg) {
+    if (!_panel) _createPanel();
+    _setView('result');
+    var r = document.getElementById('pf-result');
+    if (r) r.innerHTML =
+      '<div style="text-align:center;padding:36px 0;animation:pfFadeIn 0.3s ease">' +
+      '<div style="font-size:32px;margin-bottom:10px">❌</div>' +
+      '<div style="color:#fca5a5;font-size:13px;font-weight:600;margin-bottom:8px">Enhancement Failed</div>' +
+      '<div style="color:rgba(255,255,255,0.35);font-size:11.5px;line-height:1.6;max-width:280px;margin:0 auto">' +
+      _esc(msg) + '</div>' +
+      '<button id="pf-retry-btn" style="margin-top:14px;padding:8px 18px;border-radius:9px;' +
+      'background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.25);' +
+      'color:#93c5fd;cursor:pointer;font-size:12px;font-family:inherit;font-weight:600">↩ Try Again</button>' +
+      '</div>';
+    var retryBtn = document.getElementById('pf-retry-btn');
+    if (retryBtn) retryBtn.addEventListener('click', function () { _enhance('enhance'); });
+    _openPanel();
+  }
+
+  // ─── Toggle Diff View ────────────────────────────────────────────────────────
+  function _toggleDiff() {
+    if (!S.lastResult || !S.lastOriginal) return;
+    S.showingDiff = !S.showingDiff;
+    var diffBtn = document.getElementById('pf-diff-btn');
+    if (diffBtn) diffBtn.classList.toggle('active', S.showingDiff);
+
+    if (S.showingDiff) {
+      _enhTA.style.display = 'none';
+      if (!_diffView) {
+        _diffView = document.createElement('div');
+        _diffView.className = 'pf-diff-view';
+        _enhTA.parentNode.insertBefore(_diffView, _enhTA.nextSibling);
+      }
+      _diffView.innerHTML = wordDiffHTML(S.lastOriginal, S.lastResult.enhancedPrompt || '');
+    } else {
+      if (_diffView && _diffView.parentNode) { _diffView.remove(); _diffView = null; }
+      _enhTA.style.display = '';
+    }
+  }
+
+  // ─── Panel Actions ───────────────────────────────────────────────────────────
+  function _replacePrompt() {
+    var text = _enhTA ? _enhTA.value.trim() : '';
+    if (!text && S.lastResult) text = S.lastResult.enhancedPrompt || '';
+    if (!text) { showToast('No enhanced prompt to insert', 'error'); return; }
+    var ok = setPromptText(text);
+    if (ok) {
+      showToast('Prompt replaced! ✨', 'success');
+      _closePanel();
+    } else {
+      navigator.clipboard.writeText(text).then(function () {
+        showToast('Copied to clipboard (direct insert unavailable)', 'success');
+      }).catch(function () { showToast('Could not insert or copy prompt', 'error'); });
+    }
+  }
+
+  function _copyEnhanced() {
+    var text = _enhTA ? _enhTA.value.trim() : '';
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(function () {
+      var btn = document.getElementById('pf-copy-btn');
+      if (btn) { btn.textContent = '✅'; setTimeout(function () { btn.textContent = '📋'; }, 1600); }
+    }).catch(function () { showToast('Clipboard access denied', 'error'); });
+  }
+
+  function _toggleFav() {
+    if (!S.lastResult) return;
+    S.isFavorite = !S.isFavorite;
+    var btn = document.getElementById('pf-fav-btn');
+    if (btn) btn.textContent = S.isFavorite ? '★' : '☆';
+    _doSaveHistory(S.isFavorite);
+    showToast(S.isFavorite ? 'Saved to favorites ★' : 'Removed from favorites', 'info');
+  }
+
+  function _improveAgain() {
+    var text = _enhTA ? _enhTA.value.trim() : '';
+    if (!text) text = S.lastOriginal;
+    if (!text) { showToast('No prompt to improve', 'error'); return; }
+    _enhance('enhance', text);
+  }
+
+  function _saveHistory() {
+    if (!S.lastResult) { showToast('Nothing to save yet', 'error'); return; }
+    _doSaveHistory(S.isFavorite);
+    var btn = document.getElementById('pf-save-btn');
+    if (btn) {
+      btn.textContent = '✅ Saved!';
+      setTimeout(function () { btn.textContent = '💾 Save'; }, 1800);
+    }
+  }
+
+  function _doSaveHistory(favorite) {
+    if (!S.lastResult) return;
+    chrome.runtime.sendMessage({
+      type: 'SAVE_HISTORY',
+      original: S.lastOriginal,
+      enhanced: S.lastResult.enhancedPrompt || '',
+      action: 'enhance',
+      platform: PLAT.name,
+      favorite: !!favorite,
+    });
+  }
+
+  function _exportJSON() {
+    if (!S.lastResult) { showToast('No result to export yet', 'error'); return; }
+    var data = {
+      original: S.lastOriginal,
+      enhanced: S.lastResult.enhancedPrompt,
+      score: S.lastResult.qualityScore,
+      intent: S.lastResult.intent,
+      improvements: S.lastResult.improvements,
+      missingContext: S.lastResult.missingContext,
+      explanation: S.lastResult.explanation,
+      platform: PLAT.name,
+      timestamp: new Date().toISOString(),
+    };
+    try {
+      var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = 'prompter-' + Date.now() + '.json';
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 1000);
+    } catch (e) { showToast('Export failed', 'error'); }
   }
 
   // ─── Core Enhancement Logic ──────────────────────────────────────────────────
-  var isEnhancing = false;
+  var _busy = false;
 
-  function handleAction(action, textOverride) {
-    if (isEnhancing) return;
+  function _enhance(action, textOverride) {
+    if (_busy) return;
+    action = action || 'enhance';
 
     var prompt = textOverride || getPromptText();
     if (!prompt) {
-      showNotification('Please type a prompt first!', 'error');
+      showToast('Please type a prompt first!', 'error');
+      _openPanel();
       return;
     }
 
-    chrome.storage.local.get(['prompter_settings', 'promptforge_settings'], function (result) {
-      var settings = result.prompter_settings || result.promptforge_settings || {};
-      var apiKey = settings.apiKey || '';
+    chrome.storage.local.get(['prompter_settings', 'promptforge_settings'], function (stored) {
+      var cfg = stored.prompter_settings || stored.promptforge_settings || {};
+      var provider = cfg.provider || 'gemini';
+      var apiKey = (cfg.providerKeys && cfg.providerKeys[provider]) || cfg.apiKey || '';
+      var model = (cfg.providerModels && cfg.providerModels[provider]) || cfg.preferredModel || '';
 
       if (!apiKey) {
-        showNotification('Add your Gemini API key in Prompter Settings', 'error');
-        setTimeout(function () {
-          chrome.runtime.sendMessage({ type: 'OPEN_POPUP' });
-        }, 1200);
+        showToast('Configure API Key for ' + provider + ' in Settings', 'error');
+        _openPanel();
         return;
       }
 
-      isEnhancing = true;
-      updateButtonState('loading');
+      _busy = true;
+      S.isFavorite = false;
+      S.showingDiff = false;
 
-      var systemHints = {
-        enhance: 'Enhance this prompt with full prompt engineering. Return ONLY the enhanced prompt text, nothing else.',
-        rewrite: 'Completely rewrite this prompt to be clearer, more specific, and more effective. Return ONLY the rewritten prompt.',
-        analyze: 'Analyze this prompt and return a JSON object with: {"score": 0-100, "issues": ["..."], "suggestions": ["..."]}',
-        summarize: 'Create a concise, clear, AI-optimized version of this prompt. Return ONLY the summary prompt.',
-      };
+      // Reset diff UI
+      if (_diffView && _diffView.parentNode) { _diffView.remove(); _diffView = null; }
+      var diffBtn = document.getElementById('pf-diff-btn');
+      if (diffBtn) diffBtn.classList.remove('active');
 
-      var notif = showNotification(
-        action === 'enhance' ? 'Enhancing your prompt...' :
-        action === 'rewrite' ? 'Rewriting prompt...' :
-        action === 'analyze' ? 'Analyzing prompt quality...' :
-        'Processing...', 'loading'
+      _updateWidgetState('loading');
+      _showLoading(
+        action === 'rewrite' ? 'Rewriting prompt…' :
+        action === 'analyze' ? 'Analyzing quality…' : 'Enhancing prompt…'
       );
+
+      var convCtx = getConversationContext();
 
       chrome.runtime.sendMessage({
         type: 'GET_ENHANCEMENT',
         prompt: prompt,
         apiKey: apiKey,
-        model: settings.preferredModel || 'gemini-2.5-flash',
-        systemHint: systemHints[action] || systemHints.enhance,
-      }, function (response) {
-        isEnhancing = false;
-        updateButtonState('idle');
-        if (notif && notif.parentNode) notif.remove();
+        model: model,
+        provider: provider,
+        fullAnalysis: true,
+        conversationContext: convCtx,
+        action: action,
+      }, function (resp) {
+        _busy = false;
+        _updateWidgetState('idle');
 
         if (chrome.runtime.lastError) {
-          showNotification('Extension error: ' + chrome.runtime.lastError.message, 'error');
+          _showError('Extension error: ' + chrome.runtime.lastError.message);
           return;
         }
-        if (!response) {
-          showNotification('Failed to connect to background service.', 'error');
-          return;
-        }
-        if (!response.success) {
-          showNotification('Error: ' + (response.error || 'Enhancement failed'), 'error');
-          return;
-        }
+        if (!resp) { _showError('No response from background service.'); return; }
+        if (!resp.success) { _showError(resp.error || 'Enhancement failed. Please try again.'); return; }
 
-        var enhanced = response.text;
+        // Persist state
+        S.lastOriginal = prompt;
+        S.lastResult = resp.result || {
+          qualityScore: 72,
+          intent: { category: 'general', confidence: 75, label: 'General' },
+          missingContext: [],
+          improvements: [],
+          enhancedPrompt: resp.text || prompt,
+          explanation: 'Prompt enhanced successfully.',
+        };
 
-        if (action === 'analyze') {
-          // Show analysis as notification
-          try {
-            var analysis = JSON.parse(enhanced);
-            showNotification('Score: ' + analysis.score + '/100 | ' + (analysis.issues || []).slice(0, 2).join(', '), 'info');
-          } catch (e) {
-            showNotification(enhanced.slice(0, 120), 'info');
-          }
-          return;
-        }
+        _showResult(S.lastResult);
 
-        // Show diff preview for enhance/rewrite
-        showDiffPreview(prompt, enhanced,
-          function (accepted) {
-            var ok = setPromptText(accepted);
-            if (ok) {
-              showNotification('Prompt ' + (action === 'rewrite' ? 'rewritten' : 'enhanced') + '! 🚀', 'success');
-              // Save to history
-              chrome.runtime.sendMessage({
-                type: 'SAVE_HISTORY',
-                original: prompt,
-                enhanced: enhanced,
-                action: action,
-                platform: platform.name,
-              });
-              // Increment badge
-              chrome.runtime.sendMessage({ type: 'INCREMENT_BADGE' });
-            } else {
-              navigator.clipboard.writeText(accepted).then(function () {
-                showNotification('Copied to clipboard (could not insert directly)', 'success');
-              });
-            }
-          },
-          function () {
-            showNotification('Kept original prompt.', 'info');
-          }
-        );
+        // Background housekeeping
+        chrome.runtime.sendMessage({ type: 'INCREMENT_BADGE' });
+        chrome.runtime.sendMessage({
+          type: 'SAVE_HISTORY',
+          original: prompt,
+          enhanced: S.lastResult.enhancedPrompt,
+          action: action,
+          platform: PLAT.name,
+        });
       });
     });
   }
 
   // ─── Floating Widget ─────────────────────────────────────────────────────────
-  var widget = null;
+  var _widget = null;
 
-  function buildWidget() {
-    if (widget) return;
+  function _buildWidget() {
+    if (_widget) return;
 
-    widget = document.createElement('div');
-    widget.id = 'prompter-widget';
-    widget.setAttribute('style', [
-      'position:fixed',
-      'bottom:80px',
-      'right:20px',
-      'z-index:2147483645',
-      'display:flex',
-      'flex-direction:column',
-      'align-items:flex-end',
-      'gap:8px',
-      'font-family:Inter,system-ui,sans-serif',
-    ].join(';'));
+    var CSS = '' +
+      '<style>' +
+      '@keyframes pfWPulse{0%,100%{box-shadow:0 4px 20px rgba(66,133,244,0.4),0 0 0 0 rgba(66,133,244,0.15)}' +
+      '60%{box-shadow:0 4px 20px rgba(66,133,244,0.4),0 0 0 8px rgba(66,133,244,0)}}' +
+      '@keyframes pfWSpin{to{transform:rotate(360deg)}}' +
+      '#pf-widget{position:fixed;bottom:76px;right:18px;z-index:2147483645;' +
+      'display:none;flex-direction:column;align-items:flex-end;gap:7px;' +
+      'font-family:Inter,system-ui,sans-serif}' +
+      '#pf-widget-subs{display:flex;flex-direction:column;gap:5px;align-items:flex-end;' +
+      'opacity:0;transform:translateY(10px) scale(0.97);pointer-events:none;' +
+      'transition:opacity 0.2s,transform 0.2s cubic-bezier(0.34,1.56,0.64,1)}' +
+      '#pf-widget-subs.pf-xs-open{opacity:1;transform:none;pointer-events:auto}' +
+      '.pf-ws-btn{background:rgba(8,14,30,0.96);color:rgba(255,255,255,0.75);' +
+      'border:1px solid rgba(255,255,255,0.1);padding:6px 13px;border-radius:9px;' +
+      'font-size:11px;font-weight:600;cursor:pointer;backdrop-filter:blur(20px);' +
+      'transition:all 0.15s;white-space:nowrap;font-family:inherit}' +
+      '.pf-ws-btn:hover{background:rgba(20,30,50,0.98);color:#fff;border-color:rgba(255,255,255,0.2)}' +
+      '#pf-main-widget-btn{width:50px;height:50px;border-radius:14px;border:none;' +
+      'background:linear-gradient(135deg,#4285F4,#9333EA);color:#fff;font-size:20px;' +
+      'cursor:pointer;animation:pfWPulse 3.5s infinite;' +
+      'transition:transform 0.2s,filter 0.2s;' +
+      'display:flex;align-items:center;justify-content:center;position:relative}' +
+      '#pf-main-widget-btn:hover{transform:translateY(-2px) scale(1.06);filter:brightness(1.15)}' +
+      '</style>';
 
-    widget.innerHTML = [
-      // Platform badge
-      '<div id="pf-badge" style="background:linear-gradient(135deg,' + platform.color + '22,' + platform.color + '11);border:1px solid ' + platform.color + '44;color:' + platform.color + ';padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;opacity:0;transition:opacity 0.3s;pointer-events:none">' + platform.name + '</div>',
+    _widget = document.createElement('div');
+    _widget.id = 'pf-widget';
+    _widget.innerHTML = CSS +
+      '<div id="pf-widget-subs">' +
+        '<button class="pf-ws-btn" id="pf-ws-analyze">🔍 Analyze</button>' +
+        '<button class="pf-ws-btn" id="pf-ws-rewrite">🔄 Rewrite</button>' +
+        '<button class="pf-ws-btn" id="pf-ws-templates">🗂️ Templates</button>' +
+        '<button class="pf-ws-btn" id="pf-ws-settings">⚙️ Settings</button>' +
+        '<button class="pf-ws-btn" id="pf-ws-panel" ' +
+          'style="background:rgba(66,133,244,0.12);border-color:rgba(66,133,244,0.25);color:#93c5fd">' +
+          '📊 Assistant Panel</button>' +
+      '</div>' +
+      '<button id="pf-main-widget-btn" title="Enhance Prompt — Ctrl+Shift+E">' +
+        '<span id="pf-wi">✨</span>' +
+      '</button>';
 
-      // Action buttons (hidden initially)
-      '<div id="pf-actions" style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;opacity:0;transform:translateY(10px);transition:all 0.25s cubic-bezier(0.34,1.56,0.64,1);pointer-events:none">',
-        '<button id="pf-rewrite-btn" style="background:rgba(30,41,59,0.95);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:8px 14px;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;backdrop-filter:blur(20px);transition:all 0.2s;white-space:nowrap">🔄 Rewrite</button>',
-        '<button id="pf-analyze-btn" style="background:rgba(30,41,59,0.95);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:8px 14px;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;backdrop-filter:blur(20px);transition:all 0.2s;white-space:nowrap">🔍 Analyze</button>',
-      '</div>',
+    document.body.appendChild(_widget);
 
-      // Main button
-      '<button id="pf-main-btn" style="',
-        'width:54px;height:54px;',
-        'border-radius:16px;',
-        'border:none;',
-        'background:linear-gradient(135deg,#4285F4,#9333EA);',
-        'color:white;',
-        'font-size:22px;',
-        'cursor:pointer;',
-        'box-shadow:0 4px 24px rgba(66,133,244,0.45),0 0 0 0 rgba(66,133,244,0.3);',
-        'transition:all 0.2s cubic-bezier(0.4,0,0.2,1);',
-        'display:flex;align-items:center;justify-content:center;',
-        'position:relative;',
-        'animation:pf-pulse 3s infinite;',
-      '" title="Enhance Prompt (Ctrl+Shift+E)">',
-        '<style>',
-          '@keyframes pf-pulse{0%,100%{box-shadow:0 4px 24px rgba(66,133,244,0.45),0 0 0 0 rgba(66,133,244,0.3)}50%{box-shadow:0 4px 24px rgba(66,133,244,0.45),0 0 0 8px rgba(66,133,244,0)}}',
-          '@keyframes pf-spin{to{transform:rotate(360deg)}}',
-          '#pf-main-btn:hover{transform:translateY(-3px) scale(1.06)!important;box-shadow:0 12px 36px rgba(66,133,244,0.6)!important}',
-          '#pf-rewrite-btn:hover,#pf-analyze-btn:hover{background:rgba(51,65,85,0.98)!important;color:#f8fafc!important;border-color:rgba(255,255,255,0.2)!important}',
-        '</style>',
-        '<span id="pf-btn-icon">✨</span>',
-        // Online indicator
-        '<span style="position:absolute;top:-4px;right:-4px;width:14px;height:14px;background:#34A853;border-radius:50%;border:2px solid #0f172a;font-size:7px;display:flex;align-items:center;justify-content:center;color:white;font-weight:700">AI</span>',
-      '</button>',
-    ].join('');
+    var mainBtn = document.getElementById('pf-main-widget-btn');
+    var subsEl  = document.getElementById('pf-widget-subs');
+    var _expanded = false;
 
-    document.body.appendChild(widget);
-
-    var mainBtn = document.getElementById('pf-main-btn');
-    var actions = document.getElementById('pf-actions');
-    var badge = document.getElementById('pf-badge');
-    var rewriteBtn = document.getElementById('pf-rewrite-btn');
-    var analyzeBtn = document.getElementById('pf-analyze-btn');
-    var expanded = false;
-
-    function toggleExpanded() {
-      expanded = !expanded;
-      if (expanded) {
-        actions.style.opacity = '1';
-        actions.style.transform = 'translateY(0)';
-        actions.style.pointerEvents = 'auto';
-        badge.style.opacity = '1';
-      } else {
-        actions.style.opacity = '0';
-        actions.style.transform = 'translateY(10px)';
-        actions.style.pointerEvents = 'none';
-        badge.style.opacity = '0';
-      }
+    function toggleSubs() {
+      _expanded = !_expanded;
+      subsEl.classList.toggle('pf-xs-open', _expanded);
     }
 
     mainBtn.addEventListener('click', function (e) {
       e.stopPropagation();
-      var promptText = getPromptText();
-      if (!promptText) {
-        toggleExpanded();
-        return;
+      if (getPromptText()) {
+        if (_expanded) toggleSubs();
+        _enhance('enhance');
+      } else {
+        toggleSubs();
       }
-      // If there's a prompt, directly enhance
-      if (expanded) {
-        toggleExpanded();
-      }
-      handleAction('enhance');
     });
 
-    mainBtn.addEventListener('contextmenu', function (e) {
-      e.preventDefault();
-      toggleExpanded();
+    mainBtn.addEventListener('contextmenu', function (e) { e.preventDefault(); toggleSubs(); });
+
+    document.getElementById('pf-ws-analyze').addEventListener('click', function (e) {
+      e.stopPropagation(); toggleSubs(); _enhance('analyze');
+    });
+    document.getElementById('pf-ws-rewrite').addEventListener('click', function (e) {
+      e.stopPropagation(); toggleSubs(); _enhance('rewrite');
+    });
+    document.getElementById('pf-ws-templates').addEventListener('click', function (e) {
+      e.stopPropagation(); toggleSubs();
+      chrome.runtime.sendMessage({ type: 'OPEN_ROUTE', route: '/templates' });
+    });
+    document.getElementById('pf-ws-settings').addEventListener('click', function (e) {
+      e.stopPropagation(); toggleSubs();
+      chrome.runtime.sendMessage({ type: 'OPEN_ROUTE', route: '/settings' });
+    });
+    document.getElementById('pf-ws-panel').addEventListener('click', function (e) {
+      e.stopPropagation(); toggleSubs();
+      if (S.panelOpen) _closePanel(); else _openPanel();
     });
 
-    rewriteBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      toggleExpanded();
-      handleAction('rewrite');
-    });
-
-    analyzeBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      toggleExpanded();
-      handleAction('analyze');
-    });
-
-    // Close expanded on outside click
-    document.addEventListener('click', function () {
-      if (expanded) toggleExpanded();
-    });
+    document.addEventListener('click', function () { if (_expanded) toggleSubs(); }, true);
   }
 
-  function updateButtonState(state) {
-    var icon = document.getElementById('pf-btn-icon');
-    var btn = document.getElementById('pf-main-btn');
+  function _updateWidgetState(s) {
+    var icon = document.getElementById('pf-wi');
+    var btn  = document.getElementById('pf-main-widget-btn');
     if (!icon || !btn) return;
-    if (state === 'loading') {
+    if (s === 'loading') {
+      icon.style.animation = 'pfWSpin 0.75s linear infinite';
       icon.textContent = '⟳';
-      icon.style.animation = 'pf-spin 0.8s linear infinite';
-      btn.style.opacity = '0.8';
       btn.style.cursor = 'wait';
     } else {
-      icon.textContent = '✨';
       icon.style.animation = '';
-      btn.style.opacity = '1';
+      icon.textContent = '✨';
       btn.style.cursor = 'pointer';
     }
   }
 
-  // ─── Context Menu Action Listener ─────────────────────────────────────────────
-  window.addEventListener('prompter:action', function (e) {
-    var detail = e.detail || {};
-    var action = detail.action || 'enhance';
-    var text = detail.text || '';
-    if (text) setPromptText(text);
-    handleAction(action);
-  });
-
-  // ─── MutationObserver for SPA Navigation ──────────────────────────────────────
-  var initTimeout = null;
-
-  function scheduleInit() {
-    clearTimeout(initTimeout);
-    initTimeout = setTimeout(init, 800);
+  function _positionWidget(inputEl) {
+    if (!_widget) _buildWidget();
+    var rect = inputEl.getBoundingClientRect();
+    
+    // Position floating widget near active prompt box bottom-right
+    var top = rect.bottom - 56;
+    var left = rect.right - 58;
+    
+    // Viewport safety check
+    if (left < 10) left = 10;
+    if (left > window.innerWidth - 60) left = window.innerWidth - 60;
+    if (top < 10) top = 10;
+    if (top > window.innerHeight - 60) top = window.innerHeight - 60;
+    
+    _widget.style.position = 'fixed';
+    _widget.style.top = top + 'px';
+    _widget.style.left = left + 'px';
+    _widget.style.bottom = 'auto';
+    _widget.style.right = 'auto';
+    _widget.style.display = 'flex';
   }
 
-  function init() {
-    buildWidget();
-  }
-
-  // Observe DOM for SPA route changes (Gemini, ChatGPT use client routing)
-  var observer = new MutationObserver(function (mutations) {
-    var shouldReinit = false;
-    for (var i = 0; i < mutations.length; i++) {
-      var m = mutations[i];
-      if (m.type === 'childList' && m.addedNodes.length > 0) {
-        shouldReinit = true;
-        break;
+  // ─── Focus / Blur Listeners (auto position and show) ──────────────────────────
+  var _hideTimer = null;
+  document.addEventListener('focus', function (e) {
+    clearTimeout(_hideTimer);
+    var target = e.target;
+    var isInput = false;
+    for (var i = 0; i < PLAT.inputSelectors.length; i++) {
+      if (target.matches && target.matches(PLAT.inputSelectors[i])) {
+        isInput = true; break;
       }
     }
-    if (shouldReinit && !document.getElementById('prompter-widget')) {
-      scheduleInit();
+    if (isInput) {
+      _positionWidget(target);
     }
+  }, true);
+
+  document.addEventListener('blur', function (e) {
+    _hideTimer = setTimeout(function () {
+      if (_widget && !document.activeElement.closest('#pf-widget')) {
+        _widget.style.display = 'none';
+      }
+    }, 350);
+  }, true);
+
+  // ─── Custom Event Listener (context menu / keyboard shortcut) ─────────────
+  window.addEventListener('prompter:action', function (e) {
+    var d = (e.detail) || {};
+    var action = d.action || 'enhance';
+    var text = d.text || '';
+    if (text) setPromptText(text);
+    _enhance(action, text || undefined);
   });
 
-  observer.observe(document.body, {
-    childList: true,
-    subtree: false,
-  });
+  // ─── SPA Navigation — MutationObserver ────────────────────────────────────
+  var _initTimer = null;
+  function _scheduleInit() {
+    clearTimeout(_initTimer);
+    _initTimer = setTimeout(function () {
+      if (!document.getElementById('pf-widget')) { _widget = null; }
+      if (!document.getElementById('pf-panel'))  { _panel = null; _enhTA = null; _diffView = null; }
+      _buildWidget();
+      if (S.lastResult && !_panel) { _createPanel(); }
+    }, 900);
+  }
 
-  // Initial load
+  new MutationObserver(function (muts) {
+    for (var i = 0; i < muts.length; i++) {
+      if (muts[i].addedNodes.length && !document.getElementById('pf-widget')) {
+        _scheduleInit(); break;
+      }
+    }
+  }).observe(document.body, { childList: true, subtree: false });
+
+  // ─── Boot ──────────────────────────────────────────────────────────────────
+  function _init() {
+    _buildWidget();
+    if (S.lastResult) { _createPanel(); } // restore last result into panel
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', _init);
   } else {
-    init();
+    _init();
   }
 
 })();

@@ -1,19 +1,13 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Key, Palette, Cpu, Zap, Keyboard, Download, Upload,
+  Palette, Cpu, Zap, Keyboard, Download, Upload,
   Eye, EyeOff, Check, AlertCircle, Loader2, ToggleLeft,
 } from 'lucide-react';
 import { useSettings } from '../contexts';
-import { testApiKey } from '../ai/gemini';
+import { testApiKey, PROVIDERS, PROVIDER_MODELS } from '../ai/gemini';
 import { storage } from '../storage';
 import { downloadFile } from '../utils/nanoid';
-
-const MODELS = [
-  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', badge: 'Recommended', color: '#4285F4' },
-  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', badge: 'Stable', color: '#34A853' },
-  { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro', badge: 'Powerful', color: '#9333EA' },
-];
 
 const LANGUAGES = [
   { value: 'en', label: 'English' },
@@ -44,27 +38,70 @@ function Section({ title, icon: Icon, children }: { title: string; icon: React.E
 export function SettingsPage() {
   const { settings, updateSettings } = useSettings();
   const [showKey, setShowKey] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState(settings.apiKey);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
 
-  const handleSaveKey = async () => {
-    await updateSettings({ apiKey: apiKeyInput });
+  // Multi-provider state
+  const [activeProvider, setActiveProvider] = useState(settings.provider || 'gemini');
+  const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>(() => {
+    const keys = { ...(settings.providerKeys || {}) };
+    if (!keys.gemini && settings.apiKey) {
+      keys.gemini = settings.apiKey;
+    }
+    return { gemini: '', openai: '', anthropic: '', groq: '', openrouter: '', ...keys };
+  });
+  const [selectedModels, setSelectedModels] = useState<Record<string, string>>(() => {
+    const models = { ...(settings.providerModels || {}) };
+    if (!models.gemini && settings.preferredModel) {
+      models.gemini = settings.preferredModel;
+    }
+    return {
+      gemini: 'gemini-2.5-flash',
+      openai: 'gpt-4o-mini',
+      anthropic: 'claude-3-5-haiku-20241022',
+      groq: 'llama-3.3-70b-versatile',
+      openrouter: 'google/gemini-2.5-flash',
+      ...models
+    };
+  });
+
+  const handleSaveProviderConfig = async () => {
+    await updateSettings({
+      provider: activeProvider,
+      providerKeys: apiKeyInputs,
+      providerModels: selectedModels,
+      apiKey: apiKeyInputs[activeProvider] || '',
+      preferredModel: selectedModels[activeProvider] || '',
+    });
+    setTestStatus('success');
+    setTestMessage('Configuration saved successfully! ✓');
+    setTimeout(() => setTestStatus('idle'), 3000);
   };
 
-  const handleTestKey = async () => {
-    if (!apiKeyInput) return;
+  const handleTestConnection = async () => {
+    const key = apiKeyInputs[activeProvider] || '';
+    const model = selectedModels[activeProvider] || '';
+    if (!key) {
+      setTestStatus('error');
+      setTestMessage('Please enter an API Key first.');
+      return;
+    }
     setTestStatus('testing');
-    const result = await testApiKey(apiKeyInput, settings.preferredModel);
+    const result = await testApiKey(key, model, activeProvider);
     if (result.valid) {
       setTestStatus('success');
-      setTestMessage(`Connected to ${result.model}`);
-      await updateSettings({ apiKey: apiKeyInput });
+      setTestMessage(`Connection successful! ✓ (${result.model})`);
+      await updateSettings({
+        provider: activeProvider,
+        providerKeys: apiKeyInputs,
+        providerModels: selectedModels,
+        apiKey: key,
+        preferredModel: model,
+      });
     } else {
       setTestStatus('error');
-      setTestMessage(result.error ?? 'Invalid API key');
+      setTestMessage(result.error || 'Connection failed.');
     }
-    setTimeout(() => setTestStatus('idle'), 4000);
   };
 
   const handleExportHistory = async () => {
@@ -90,6 +127,7 @@ export function SettingsPage() {
     input.click();
   };
 
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Header */}
@@ -102,119 +140,150 @@ export function SettingsPage() {
         </p>
       </motion.div>
 
-      {/* API Key */}
-      <Section title="Gemini API Key" icon={Key}>
-        <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
-          Get your free API key from{' '}
-          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer"
-            className="text-primary-500 hover:underline font-medium">
-            Google AI Studio
-          </a>
-          . Your key is stored locally and never transmitted to our servers.
+      {/* AI Providers Section */}
+      <Section title="AI Providers & Models" icon={Cpu}>
+        <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
+          Configure connection details for your preferred AI models. Prompter AI will route prompts through the active provider.
         </p>
-        <div className="relative mb-3">
-          <input
-            id="api-key-input"
-            className="input-field pr-12 font-mono text-sm"
-            type={showKey ? 'text' : 'password'}
-            placeholder="AIza..."
-            value={apiKeyInput}
-            onChange={e => setApiKeyInput(e.target.value)}
-          />
-          <button
-            className="btn-icon absolute right-2 top-1/2 -translate-y-1/2"
-            onClick={() => setShowKey(!showKey)}
-          >
-            {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
-          </button>
-        </div>
 
-        {testStatus !== 'idle' && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            className={`flex items-center gap-2 p-2.5 rounded-xl mb-3 text-xs font-medium ${
-              testStatus === 'success' ? 'text-green-700' :
-              testStatus === 'error' ? 'text-red-700' : ''
-            }`}
-            style={{
-              background: testStatus === 'success' ? '#D1FAE5' :
-                testStatus === 'error' ? '#FEE2E2' : 'var(--bg-muted)',
-              color: testStatus === 'success' ? '#065F46' : testStatus === 'error' ? '#7F1D1D' : 'var(--text-muted)'
+        {/* Active Provider Dropdown */}
+        <div className="mb-4">
+          <label className="text-xs font-semibold block mb-2" style={{ color: 'var(--text-secondary)' }}>
+            Active Provider
+          </label>
+          <select
+            className="input-field"
+            value={activeProvider}
+            onChange={(e) => {
+              const p = e.target.value;
+              setActiveProvider(p);
+              setTestStatus('idle');
+              setTestMessage('');
             }}
           >
-            {testStatus === 'testing' && <Loader2 size={13} className="animate-spin" />}
-            {testStatus === 'success' && <Check size={13} />}
-            {testStatus === 'error' && <AlertCircle size={13} />}
-            {testStatus === 'testing' ? 'Testing connection...' : testMessage}
-          </motion.div>
-        )}
-
-        <div className="flex gap-2">
-          <button className="btn-primary" onClick={handleTestKey} disabled={!apiKeyInput || testStatus === 'testing'}>
-            {testStatus === 'testing' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-            Test & Save
-          </button>
-          <button className="btn-secondary" onClick={handleSaveKey}>
-            Save Key
-          </button>
+            {PROVIDERS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
         </div>
-      </Section>
 
-      {/* Theme */}
-      <Section title="Appearance" icon={Palette}>
-        <div className="grid grid-cols-3 gap-2">
-          {(['light', 'system', 'dark'] as const).map((theme) => (
-            <button
-              key={theme}
-              id={`theme-${theme}`}
-              className={`p-3 rounded-2xl border text-sm font-medium transition-all capitalize ${
-                settings.theme === theme
-                  ? 'border-primary-400 text-primary-500'
-                  : ''
-              }`}
-              style={{
-                background: settings.theme === theme ? 'rgba(66,133,244,0.08)' : 'var(--bg-muted)',
-                borderColor: settings.theme === theme ? '#4285F4' : 'var(--border)',
-                color: settings.theme === theme ? '#4285F4' : 'var(--text-secondary)',
-              }}
-              onClick={() => updateSettings({ theme })}
-            >
-              {theme === 'light' ? '☀️' : theme === 'dark' ? '🌙' : '🖥️'} {theme}
-            </button>
-          ))}
-        </div>
-      </Section>
+        {/* Selected Provider Configuration */}
+        {(() => {
+          const currentProvMeta = PROVIDERS.find((p) => p.id === activeProvider);
+          const modelsList = PROVIDER_MODELS[activeProvider] || [];
+          const currentKey = apiKeyInputs[activeProvider] || '';
+          const currentModel = selectedModels[activeProvider] || '';
 
-      {/* AI Model */}
-      <Section title="AI Model" icon={Cpu}>
-        <div className="space-y-2">
-          {MODELS.map((model) => (
-            <button
-              key={model.value}
-              className={`w-full flex items-center justify-between p-3 rounded-2xl border transition-all ${
-                settings.preferredModel === model.value ? 'border-primary-400' : ''
-              }`}
-              style={{
-                background: settings.preferredModel === model.value ? 'rgba(66,133,244,0.06)' : 'var(--bg-muted)',
-                borderColor: settings.preferredModel === model.value ? '#4285F4' : 'var(--border)',
-              }}
-              onClick={() => updateSettings({ preferredModel: model.value })}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full" style={{ background: model.color }} />
-                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{model.label}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="badge text-xs text-white" style={{ background: model.color }}>
-                  {model.badge}
+          return (
+            <div className="p-4 rounded-2xl border space-y-4 mb-4" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border)' }}>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                  {currentProvMeta?.label} Config
                 </span>
-                {settings.preferredModel === model.value && <Check size={14} className="text-primary-500" />}
+                {currentProvMeta?.doc && (
+                  <a
+                    href={currentProvMeta.doc}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-primary-500 hover:underline font-semibold"
+                  >
+                    Get API Key →
+                  </a>
+                )}
               </div>
-            </button>
-          ))}
-        </div>
+
+              {/* API Key Input */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold block" style={{ color: 'var(--text-secondary)' }}>
+                  API Key
+                </label>
+                <div className="relative">
+                  <input
+                    className="input-field pr-12 font-mono text-sm"
+                    type={showKey ? 'text' : 'password'}
+                    placeholder={currentProvMeta?.placeholder || 'Enter key...'}
+                    value={currentKey}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setApiKeyInputs((prev) => ({ ...prev, [activeProvider]: val }));
+                      setTestStatus('idle');
+                    }}
+                  />
+                  <button
+                    className="btn-icon absolute right-2 top-1/2 -translate-y-1/2"
+                    onClick={() => setShowKey(!showKey)}
+                  >
+                    {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Model Dropdown */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold block" style={{ color: 'var(--text-secondary)' }}>
+                  Model Selection
+                </label>
+                <select
+                  className="input-field"
+                  value={currentModel}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedModels((prev) => ({ ...prev, [activeProvider]: val }));
+                    setTestStatus('idle');
+                  }}
+                >
+                  {modelsList.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status Display */}
+              {testStatus !== 'idle' && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-2 p-2.5 rounded-xl text-xs font-medium"
+                  style={{
+                    background: testStatus === 'success' ? 'rgba(52,168,83,0.12)' :
+                      testStatus === 'error' ? 'rgba(234,67,53,0.12)' : 'var(--bg-card)',
+                    color: testStatus === 'success' ? '#34A853' : testStatus === 'error' ? '#EA4335' : 'var(--text-primary)',
+                    border: '1px solid var(--border)'
+                  }}
+                >
+                  {testStatus === 'testing' && <Loader2 size={13} className="animate-spin" />}
+                  {testStatus === 'success' && <Check size={13} />}
+                  {testStatus === 'error' && <AlertCircle size={13} />}
+                  {testStatus === 'testing' ? 'Testing credentials connection...' : testMessage}
+                </motion.div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-2">
+                <button
+                  className="btn-primary py-2 text-xs"
+                  onClick={handleTestConnection}
+                  disabled={!currentKey || testStatus === 'testing'}
+                >
+                  {testStatus === 'testing' ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                  Test Connection
+                </button>
+                <button
+                  className="btn-secondary py-2 text-xs"
+                  onClick={handleSaveProviderConfig}
+                >
+                  Save Config
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </Section>
+
 
       {/* Preferences */}
       <Section title="Preferences" icon={Zap}>
