@@ -37,7 +37,7 @@ export function AboutPage() {
           <Zap size={36} className="text-white" fill="white" />
         </motion.div>
         <h1 className="text-3xl font-bold mb-2">
-          <span className="gradient-text">PromptForge AI</span>
+          <span className="gradient-text">Prompter AI</span>
         </h1>
         <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
           Version 1.0.0 · MVP
@@ -68,7 +68,7 @@ export function AboutPage() {
 
       {/* Features */}
       <div className="space-y-3">
-        <h2 className="font-bold text-base px-1" style={{ color: 'var(--text-primary)' }}>Why PromptForge?</h2>
+        <h2 className="font-bold text-base px-1" style={{ color: 'var(--text-primary)' }}>Why Prompter?</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {FEATURES.map(({ icon: Icon, title, desc }, i) => (
             <motion.div
@@ -114,7 +114,7 @@ export function AboutPage() {
           {' '}with ❤️ and ✨
         </p>
         <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
-          Powered by Gemini AI · © 2024 PromptForge AI
+          Powered by Gemini AI · © 2024 Prompter AI
         </p>
       </div>
     </div>

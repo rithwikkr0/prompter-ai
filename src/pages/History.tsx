@@ -64,7 +64,7 @@ export function HistoryPage() {
 
   const handleExport = async () => {
     const json = await storage.exportHistory();
-    downloadFile(json, `promptforge-history-${Date.now()}.json`, 'application/json');
+    downloadFile(json, `prompter-history-${Date.now()}.json`, 'application/json');
   };
 
   const handleClearAll = async () => {

@@ -77,7 +77,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               exit={{ opacity: 0, width: 0 }}
               className="overflow-hidden"
             >
-              <span className="font-bold text-base gradient-text whitespace-nowrap">PromptForge</span>
+              <span className="font-bold text-base gradient-text whitespace-nowrap">Prompter</span>
               <span className="text-xs block whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>AI v1.0</span>
             </motion.div>
           )}
@@ -172,7 +172,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <button className="btn-icon" onClick={() => setMobileOpen(true)}>
             <Menu size={20} />
           </button>
-          <span className="font-bold gradient-text">PromptForge AI</span>
+          <span className="font-bold gradient-text">Prompter AI</span>
         </div>
 
         <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">

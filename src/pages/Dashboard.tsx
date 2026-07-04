@@ -55,7 +55,7 @@ export function DashboardPage() {
           className="glass-card-static p-5"
         >
           <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>
-            How PromptForge Works
+            How Prompter Works
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[

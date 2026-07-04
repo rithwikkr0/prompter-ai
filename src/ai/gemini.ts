@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { EnhancementResultSchema, type EnhancementResult } from '../types';
 
 // ─── System Prompt ─────────────────────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are PromptForge AI, an expert prompt engineering assistant. Your job is to analyze user prompts and enhance them using advanced prompt engineering techniques.
+const SYSTEM_PROMPT = `You are Prompter AI, an expert prompt engineering assistant. Your job is to analyze user prompts and enhance them using advanced prompt engineering techniques.
 
 When given a prompt, you must respond with a valid JSON object (no markdown, no code blocks, just raw JSON) with this exact structure:
 {
@@ -101,15 +101,43 @@ export async function enhancePrompt(
   return validated.data;
 }
 
-// ─── Test API Connection ───────────────────────────────────────────────────────
-export async function testApiKey(apiKey: string): Promise<{ valid: boolean; model?: string; error?: string }> {
+// ─── Test API Connection ─────────────────────────────────────────────────────────────
+export async function testApiKey(
+  apiKey: string,
+  preferredModel = 'gemini-2.5-flash',
+): Promise<{ valid: boolean; model?: string; error?: string }> {
   try {
     const client = getClient(apiKey);
-    const model = client.getGenerativeModel({ model: 'gemini-2.0-flash' });
-    const result = await model.generateContent('Say "OK" in one word.');
-    const text = result.response.text();
-    return { valid: !!text, model: 'gemini-2.0-flash' };
+    // Try preferred model first, fall back through options
+    const modelsToTry = [preferredModel, 'gemini-2.5-flash', 'gemini-1.5-flash'];
+    const uniqueModels = [...new Set(modelsToTry)];
+
+    for (const model of uniqueModels) {
+      try {
+        const genModel = client.getGenerativeModel({ model });
+        const result = await genModel.generateContent('Say "OK" in one word.');
+        const text = result.response.text();
+        if (text) return { valid: true, model };
+      } catch (modelErr) {
+        const msg = (modelErr as Error).message ?? '';
+        // 429 on this model — try next
+        if (msg.includes('429') || msg.includes('quota')) continue;
+        // Other error — propagate
+        throw modelErr;
+      }
+    }
+    return { valid: false, error: 'All models rate-limited. Please wait a minute and try again.' };
   } catch (e) {
-    return { valid: false, error: (e as Error).message };
+    const msg = (e as Error).message ?? 'Unknown error';
+    if (msg.includes('429') || msg.includes('quota')) {
+      return {
+        valid: false,
+        error: 'Rate limit reached on free tier. Wait ~1 minute then try again, or upgrade your Google AI plan.',
+      };
+    }
+    if (msg.includes('API_KEY_INVALID') || msg.includes('401')) {
+      return { valid: false, error: 'Invalid API key. Please check it at aistudio.google.com.' };
+    }
+    return { valid: false, error: msg };
   }
 }

@@ -98,7 +98,7 @@ function EnhancedPromptCard({ result, originalPrompt }: { result: EnhancementRes
 
   const handleExport = () => {
     const content = `# Enhanced Prompt\n\n## Original\n${originalPrompt}\n\n## Enhanced\n${result.enhancedPrompt}\n\n## Explanation\n${result.explanation}`;
-    downloadFile(content, `promptforge-${Date.now()}.md`, 'text/markdown');
+    downloadFile(content, `prompter-${Date.now()}.md`, 'text/markdown');
   };
 
   return (

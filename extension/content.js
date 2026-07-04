@@ -1,4 +1,4 @@
-// PromptForge AI — Content Script
+// Prompter AI — Content Script
 // Injected into supported AI platforms to provide floating enhance button
 
 (function() {
@@ -41,13 +41,12 @@
 
   // ─── Create Floating Button ──────────────────────────────────────────────────
   let floatingBtn = null;
-  let isVisible = false;
 
   function createFloatingButton() {
     if (floatingBtn) return;
 
     floatingBtn = document.createElement('div');
-    floatingBtn.id = 'promptforge-btn';
+    floatingBtn.id = 'prompter-btn';
     floatingBtn.innerHTML = `
       <div style="
         position: fixed;
@@ -89,7 +88,7 @@
           align-items: center;
           justify-content: center;
           position: relative;
-        " title="Enhance Prompt with PromptForge AI (Ctrl+Shift+E)">
+        " title="Enhance Prompt with Prompter AI (Ctrl+Shift+E)">
           ✨
           <span style="
             position: absolute;
@@ -114,20 +113,20 @@
     const btn = document.getElementById('pf-enhance-btn');
     const tooltip = document.getElementById('pf-tooltip');
 
-    // Hover effects
-    btn.addEventListener('mouseenter', () => {
-      btn.style.transform = 'translateY(-3px) scale(1.05)';
-      btn.style.boxShadow = '0 8px 32px rgba(66,133,244,0.6)';
-      tooltip.style.opacity = '1';
-    });
-    btn.addEventListener('mouseleave', () => {
-      btn.style.transform = 'none';
-      btn.style.boxShadow = '0 4px 24px rgba(66,133,244,0.4)';
-      tooltip.style.opacity = '0';
-    });
+    if (btn && tooltip) {
+      btn.addEventListener('mouseenter', () => {
+        btn.style.transform = 'translateY(-3px) scale(1.05)';
+        btn.style.boxShadow = '0 8px 32px rgba(66,133,244,0.6)';
+        tooltip.style.opacity = '1';
+      });
+      btn.addEventListener('mouseleave', () => {
+        btn.style.transform = 'none';
+        btn.style.boxShadow = '0 4px 24px rgba(66,133,244,0.4)';
+        tooltip.style.opacity = '0';
+      });
 
-    // Click to enhance
-    btn.addEventListener('click', handleEnhance);
+      btn.addEventListener('click', handleEnhance);
+    }
   }
 
   // ─── Get Prompt Text from Current Platform ────────────────────────────────────
@@ -137,13 +136,12 @@
       const el = document.querySelector(sel);
       if (!el) continue;
       if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
-        return el.value.trim();
+        return (el as HTMLTextAreaElement | HTMLInputElement).value.trim();
       }
       if (el.getAttribute('contenteditable')) {
-        return el.innerText.trim();
+        return (el as HTMLElement).innerText.trim();
       }
     }
-    // Fallback: selected text
     const sel = window.getSelection();
     return sel && sel.toString().trim() ? sel.toString().trim() : '';
   }
@@ -155,13 +153,15 @@
       const el = document.querySelector(sel);
       if (!el) continue;
       if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-        nativeInputValueSetter.call(el, text);
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        return true;
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+        if (nativeInputValueSetter) {
+          nativeInputValueSetter.call(el, text);
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          return true;
+        }
       }
       if (el.getAttribute('contenteditable')) {
-        el.innerText = text;
+        (el as HTMLElement).innerText = text;
         el.dispatchEvent(new Event('input', { bubbles: true }));
         return true;
       }
@@ -224,13 +224,13 @@
       return;
     }
 
-    // Get API key from storage
-    const result = await chrome.storage.local.get(['promptforge_settings']);
-    const settings = result.promptforge_settings ?? {};
+    // Get API key from storage (support both new prompter_settings and legacy promptforge_settings)
+    const result = await chrome.storage.local.get(['prompter_settings', 'promptforge_settings']);
+    const settings = result.prompter_settings ?? result.promptforge_settings ?? {};
     const apiKey = settings.apiKey ?? '';
 
     if (!apiKey) {
-      showNotification('Please add your Gemini API key in PromptForge Settings', 'error');
+      showNotification('Please add your Gemini API key in Prompter Settings', 'error');
       setTimeout(() => chrome.runtime.sendMessage({ type: 'OPEN_POPUP' }), 1000);
       return;
     }
@@ -238,7 +238,6 @@
     const notif = showNotification('Enhancing your prompt with AI...', 'loading');
 
     try {
-      // Call Gemini API directly from content script
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${settings.preferredModel ?? 'gemini-2.0-flash'}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -264,21 +263,21 @@
       if (success) {
         showNotification('✨ Prompt enhanced! Check your input field.', 'success');
       } else {
-        // Fallback: copy to clipboard
         await navigator.clipboard.writeText(enhanced);
         showNotification('Enhanced prompt copied to clipboard!', 'success');
       }
     } catch (err) {
       notif?.remove();
-      showNotification(`Error: ${err.message}`, 'error');
+      showNotification(`Error: ${(err as Error).message}`, 'error');
     }
   }
 
   // ─── Listen for custom events from background ─────────────────────────────────
-  window.addEventListener('promptforge:action', (e) => {
-    const { action, text } = e.detail ?? {};
+  window.addEventListener('prompter:action', (e: Event) => {
+    const customEvent = e as CustomEvent;
+    const { action, text } = customEvent.detail ?? {};
     if (action === 'enhance') {
-      if (text) setPromptText(text); // pre-fill if text was provided via context menu
+      if (text) setPromptText(text);
       handleEnhance();
     }
   });
@@ -294,3 +293,4 @@
     init();
   }
 })();
+

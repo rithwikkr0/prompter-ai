@@ -55,7 +55,7 @@ export function SettingsPage() {
   const handleTestKey = async () => {
     if (!apiKeyInput) return;
     setTestStatus('testing');
-    const result = await testApiKey(apiKeyInput);
+    const result = await testApiKey(apiKeyInput, settings.preferredModel);
     if (result.valid) {
       setTestStatus('success');
       setTestMessage(`Connected to ${result.model}`);
@@ -69,7 +69,7 @@ export function SettingsPage() {
 
   const handleExportHistory = async () => {
     const json = await storage.exportHistory();
-    downloadFile(json, `promptforge-history-${Date.now()}.json`, 'application/json');
+    downloadFile(json, `prompter-history-${Date.now()}.json`, 'application/json');
   };
 
   const handleImportHistory = () => {
@@ -98,7 +98,7 @@ export function SettingsPage() {
           <span className="gradient-text">Settings</span>
         </h1>
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Configure your PromptForge AI experience.
+          Configure your Prompter AI experience.
         </p>
       </motion.div>
 

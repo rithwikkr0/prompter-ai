@@ -1,20 +1,20 @@
-// PromptForge AI — Background Service Worker
+// Prompter AI — Background Service Worker
 // Handles context menus, keyboard shortcuts, and message routing
 
 // ─── Context Menu Setup ────────────────────────────────────────────────────────
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
-    id: 'promptforge-enhance',
-    title: '✨ Enhance with PromptForge',
+    id: 'prompter-enhance',
+    title: '✨ Enhance with Prompter AI',
     contexts: ['selection', 'editable'],
   });
   chrome.contextMenus.create({
-    id: 'promptforge-analyze',
+    id: 'prompter-analyze',
     title: '🔍 Analyze Prompt Quality',
     contexts: ['selection', 'editable'],
   });
   chrome.contextMenus.create({
-    id: 'promptforge-rewrite',
+    id: 'prompter-rewrite',
     title: '🔄 Rewrite Prompt',
     contexts: ['selection', 'editable'],
   });
@@ -24,7 +24,7 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab?.id) return;
 
-  const action = info.menuItemId as string;
+  const action = info.menuItemId;
   const text = info.selectionText ?? '';
 
   // Inject content script action
@@ -32,11 +32,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     target: { tabId: tab.id },
     func: (promptText, actionType) => {
       // Dispatch custom event to content script
-      window.dispatchEvent(new CustomEvent('promptforge:action', {
+      window.dispatchEvent(new CustomEvent('prompter:action', {
         detail: { text: promptText, action: actionType },
       }));
     },
-    args: [text, action.replace('promptforge-', '')],
+    args: [text, action.replace('prompter-', '')],
   });
 });
 
@@ -47,7 +47,7 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
   await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     func: () => {
-      window.dispatchEvent(new CustomEvent('promptforge:action', {
+      window.dispatchEvent(new CustomEvent('prompter:action', {
         detail: { action: 'enhance' },
       }));
     },
@@ -60,9 +60,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     chrome.action.openPopup?.();
   }
   if (message.type === 'GET_SETTINGS') {
-    chrome.storage.local.get(['promptforge_settings'], (result) => {
-      sendResponse({ settings: result.promptforge_settings ?? {} });
+    // Look up new key, fallback to migrating old key
+    chrome.storage.local.get(['prompter_settings', 'promptforge_settings'], (result) => {
+      if (result.prompter_settings) {
+        sendResponse({ settings: result.prompter_settings });
+      } else if (result.promptforge_settings) {
+        // Automatically migrate to new key
+        chrome.storage.local.set({ prompter_settings: result.promptforge_settings }, () => {
+          sendResponse({ settings: result.promptforge_settings });
+        });
+      } else {
+        sendResponse({ settings: {} });
+      }
     });
     return true; // async response
   }
 });
+
