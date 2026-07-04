@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Key, Palette, Cpu, Zap, Globe, Keyboard, Download, Upload,
-  Eye, EyeOff, Check, AlertCircle, Loader2, Settings as SettingsIcon,
+  Key, Palette, Cpu, Zap, Keyboard, Download, Upload,
+  Eye, EyeOff, Check, AlertCircle, Loader2, ToggleLeft,
 } from 'lucide-react';
 import { useSettings } from '../contexts';
 import { testApiKey } from '../ai/gemini';
@@ -228,13 +228,37 @@ export function SettingsPage() {
             <button
               role="switch"
               aria-checked={settings.autoEnhance}
-              className={`relative w-11 h-6 rounded-full transition-colors ${settings.autoEnhance ? 'bg-primary-500' : ''}`}
+              className="relative w-11 h-6 rounded-full transition-colors"
               style={{ background: settings.autoEnhance ? '#4285F4' : 'var(--bg-muted)', border: '1px solid var(--border)' }}
               onClick={() => updateSettings({ autoEnhance: !settings.autoEnhance })}
             >
               <motion.div
                 className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow"
                 animate={{ left: settings.autoEnhance ? '22px' : '2px' }}
+                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+              />
+            </button>
+          </div>
+
+          {/* Floating widget toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Floating Widget</p>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Show ✨ button on AI platforms</p>
+            </div>
+            <button
+              role="switch"
+              aria-checked={(settings as Record<string, unknown>).floatingWidget !== false}
+              className="relative w-11 h-6 rounded-full transition-colors"
+              style={{
+                background: (settings as Record<string, unknown>).floatingWidget !== false ? '#4285F4' : 'var(--bg-muted)',
+                border: '1px solid var(--border)',
+              }}
+              onClick={() => updateSettings({ floatingWidget: (settings as Record<string, unknown>).floatingWidget === false } as Parameters<typeof updateSettings>[0])}
+            >
+              <motion.div
+                className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow"
+                animate={{ left: (settings as Record<string, unknown>).floatingWidget !== false ? '22px' : '2px' }}
                 transition={{ type: 'spring', stiffness: 500, damping: 30 }}
               />
             </button>
@@ -251,6 +275,70 @@ export function SettingsPage() {
               {LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
             </select>
           </div>
+        </div>
+      </Section>
+
+      {/* Keyboard Shortcuts */}
+      <Section title="Keyboard Shortcuts" icon={Keyboard}>
+        <div className="space-y-2">
+          {[
+            { keys: 'Ctrl+Shift+E', action: 'Enhance current prompt', mac: '⌘+Shift+E' },
+            { keys: 'Right-click → menu', action: 'Enhance / Rewrite / Analyze / Summarize', mac: 'Same' },
+          ].map(({ keys, action, mac }) => (
+            <div
+              key={keys}
+              className="flex items-center justify-between p-3 rounded-2xl"
+              style={{ background: 'var(--bg-muted)' }}
+            >
+              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{action}</span>
+              <div className="flex items-center gap-2">
+                <code className="text-xs px-2 py-1 rounded-lg font-mono"
+                  style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
+                  {keys}
+                </code>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs mt-3" style={{ color: 'var(--text-muted)' }}>
+          Customize keyboard shortcuts in{' '}
+          <span
+            className="text-primary-500 hover:underline cursor-pointer"
+            onClick={() => window.open('chrome://extensions/shortcuts', '_blank')}
+          >
+            chrome://extensions/shortcuts
+          </span>
+        </p>
+      </Section>
+
+      {/* Extension Integration */}
+      <Section title="Extension Status" icon={ToggleLeft}>
+        <div className="space-y-3">
+          {[
+            { label: 'Google Gemini', url: 'https://gemini.google.com', color: '#4285F4' },
+            { label: 'ChatGPT', url: 'https://chat.openai.com', color: '#10A37F' },
+            { label: 'Claude', url: 'https://claude.ai', color: '#D97706' },
+            { label: 'Perplexity', url: 'https://www.perplexity.ai', color: '#6366F1' },
+            { label: 'Copilot', url: 'https://copilot.microsoft.com', color: '#0078D4' },
+            { label: 'Grok', url: 'https://grok.com', color: '#1DA1F2' },
+          ].map(({ label, url, color }) => (
+            <div key={label} className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ background: color }} />
+                <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{label}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="badge" style={{ background: 'rgba(52,168,83,0.12)', color: '#34A853', fontSize: '10px' }}>Active</span>
+                <button
+                  className="text-xs hover:underline"
+                  style={{ color: 'var(--text-muted)' }}
+                  onClick={() => window.open(url, '_blank')}
+                >
+                  Open →
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </Section>
 

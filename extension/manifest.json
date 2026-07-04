@@ -15,39 +15,49 @@
     "default_title": "Prompter AI",
     "default_icon": {
       "16": "icons/icon16.png",
-      "32": "icons/icon32.png"
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
     }
   },
   "permissions": [
     "storage",
     "activeTab",
     "scripting",
-    "contextMenus"
+    "contextMenus",
+    "clipboardWrite",
+    "notifications",
+    "tabs"
   ],
   "host_permissions": [
     "https://gemini.google.com/*",
     "https://chat.openai.com/*",
+    "https://chatgpt.com/*",
     "https://claude.ai/*",
     "https://www.perplexity.ai/*",
     "https://copilot.microsoft.com/*",
-    "https://x.com/*"
+    "https://x.com/*",
+    "https://grok.com/*",
+    "https://generativelanguage.googleapis.com/*"
   ],
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {
       "matches": [
         "https://gemini.google.com/*",
         "https://chat.openai.com/*",
+        "https://chatgpt.com/*",
         "https://claude.ai/*",
         "https://www.perplexity.ai/*",
         "https://copilot.microsoft.com/*",
-        "https://x.com/*"
+        "https://x.com/*",
+        "https://grok.com/*"
       ],
       "js": ["content.js"],
-      "run_at": "document_idle"
+      "css": [],
+      "run_at": "document_idle",
+      "all_frames": false
     }
   ],
   "commands": {
@@ -56,13 +66,14 @@
         "default": "Ctrl+Shift+E",
         "mac": "Command+Shift+E"
       },
-      "description": "Enhance the current prompt"
+      "description": "Enhance the current prompt with Prompter AI"
     }
   },
   "web_accessible_resources": [
     {
-      "resources": ["icons/*"],
+      "resources": ["icons/*", "assets/*"],
       "matches": ["<all_urls>"]
     }
-  ]
+  ],
+  "offline_enabled": true
 }
