@@ -54,18 +54,17 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
   });
 });
 
-// ─── Message Relay ─────────────────────────────────────────────────────────────
+// ─── Message Relay & API Worker delegation ─────────────────────────────────────
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'OPEN_POPUP') {
     chrome.action.openPopup?.();
   }
+
   if (message.type === 'GET_SETTINGS') {
-    // Look up new key, fallback to migrating old key
     chrome.storage.local.get(['prompter_settings', 'promptforge_settings'], (result) => {
       if (result.prompter_settings) {
         sendResponse({ settings: result.prompter_settings });
       } else if (result.promptforge_settings) {
-        // Automatically migrate to new key
         chrome.storage.local.set({ prompter_settings: result.promptforge_settings }, () => {
           sendResponse({ settings: result.promptforge_settings });
         });
@@ -73,6 +72,33 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse({ settings: {} });
       }
     });
+    return true; // async response
+  }
+
+  if (message.type === 'GET_ENHANCEMENT') {
+    const { prompt, apiKey, model } = message;
+    fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          role: 'user',
+          parts: [{ text: `You are a prompt engineering expert. Enhance this prompt and return ONLY the enhanced version, nothing else:\n\n${prompt}` }]
+        }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
+      })
+    })
+      .then(res => {
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        const enhanced = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        sendResponse({ success: true, text: enhanced });
+      })
+      .catch(err => {
+        sendResponse({ success: false, error: err.message });
+      });
     return true; // async response
   }
 });

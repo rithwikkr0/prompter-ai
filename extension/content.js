@@ -237,39 +237,30 @@
 
     const notif = showNotification('Enhancing your prompt with AI...', 'loading');
 
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${settings.preferredModel ?? 'gemini-2.0-flash'}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            role: 'user',
-            parts: [{ text: `You are a prompt engineering expert. Enhance this prompt and return ONLY the enhanced version, nothing else:\n\n${prompt}` }]
-          }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
-        })
-      });
-
-      if (!response.ok) throw new Error(`API error: ${response.status}`);
-
-      const data = await response.json();
-      const enhanced = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-
-      if (!enhanced) throw new Error('No response from AI');
-
+    // Delegate API call to background worker to bypass CORS on target AI platforms
+    chrome.runtime.sendMessage({
+      type: 'GET_ENHANCEMENT',
+      prompt,
+      apiKey,
+      model: settings.preferredModel ?? 'gemini-2.5-flash',
+    }, async (response) => {
       notif?.remove();
-      const success = setPromptText(enhanced);
-
-      if (success) {
-        showNotification('✨ Prompt enhanced! Check your input field.', 'success');
-      } else {
-        await navigator.clipboard.writeText(enhanced);
-        showNotification('Enhanced prompt copied to clipboard!', 'success');
+      if (!response) {
+        showNotification('Failed to connect to extension background service.', 'error');
+        return;
       }
-    } catch (err) {
-      notif?.remove();
-      showNotification(`Error: ${(err as Error).message}`, 'error');
-    }
+      if (response.success && response.text) {
+        const success = setPromptText(response.text);
+        if (success) {
+          showNotification('✨ Prompt enhanced! Check your input field.', 'success');
+        } else {
+          await navigator.clipboard.writeText(response.text);
+          showNotification('Enhanced prompt copied to clipboard!', 'success');
+        }
+      } else {
+        showNotification(`Error: ${response.error || 'Failed to enhance prompt'}`, 'error');
+      }
+    });
   }
 
   // ─── Listen for custom events from background ─────────────────────────────────
