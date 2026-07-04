@@ -1,0 +1,27 @@
+{
+  "name": "PromptForge AI",
+  "short_name": "PromptForge",
+  "description": "AI-powered prompt engineering assistant",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#060b1a",
+  "theme_color": "#4285F4",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Enhance Prompt",
+      "short_name": "Enhance",
+      "url": "/",
+      "description": "Go to prompt enhancer"
+    }
+  ]
+}
