@@ -8,7 +8,7 @@
 
 If you just want to run the extension in Chrome without doing any development work:
 
-1. **[Click here to download Prompter AI (.zip)](https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/archive/refs/heads/master.zip)** *(Note: Replace `YOUR_GITHUB_USERNAME` and `YOUR_REPO_NAME` with your actual GitHub username and repository name once uploaded)*.
+1. **[Click here to download Prompter AI (.zip)](https://github.com/rithwikkr0/prompter-ai/archive/refs/heads/master.zip)**.
 2. Extract the downloaded `.zip` file to a folder on your computer.
 3. Open Google Chrome and go to `chrome://extensions`.
 4. Enable **Developer mode** using the toggle switch in the top-right corner.
