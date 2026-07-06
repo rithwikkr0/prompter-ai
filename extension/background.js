@@ -1,21 +1,40 @@
 // Prompter AI — Background Service Worker v2.0
 // Manifest V3 — No DOM access, handles messaging, API calls, storage
 
+// Configure side panel behavior or fallback to popup
+function configureSidePanel() {
+  if (typeof chrome !== 'undefined' && chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(function(e) {
+      console.warn('Failed to set side panel behavior, falling back to popup', e);
+      chrome.action.setPopup({ popup: 'popup.html' });
+    });
+  } else if (typeof chrome !== 'undefined' && chrome.action) {
+    chrome.action.setPopup({ popup: 'popup.html' });
+  }
+}
+
 // ─── Install / Update ──────────────────────────────────────────────────────────
 chrome.runtime.onInstalled.addListener(function (details) {
   // Set up context menus
   setupContextMenus();
+  
+  // Set side panel or popup behavior
+  configureSidePanel();
 
-  // First install → open onboarding
+  // First install → open onboarding (opened in a tab context)
   if (details.reason === 'install') {
     chrome.tabs.create({
-      url: chrome.runtime.getURL('popup.html') + '#/onboarding',
+      url: chrome.runtime.getURL('popup.html') + '?context=tab#/onboarding',
     });
   }
 
   // Initialize badge
   chrome.action.setBadgeBackgroundColor({ color: '#4285F4' });
 });
+
+// Configure on startup/initialization too
+configureSidePanel();
+
 
 // ─── Context Menus ────────────────────────────────────────────────────────────
 function setupContextMenus() {
@@ -94,9 +113,10 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
   // ── Open specific dashboard route in a new tab ──
   if (message.type === 'OPEN_ROUTE') {
     var route = message.route || '/';
-    chrome.tabs.create({ url: chrome.runtime.getURL('popup.html') + '#' + route });
+    chrome.tabs.create({ url: chrome.runtime.getURL('popup.html') + '?context=tab#' + route });
     return false;
   }
+
 
 
   // ── Increment enhancement badge ──
@@ -344,15 +364,20 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
       .catch(function (err) {
         var msg = err.message || 'Unknown connection error';
         var friendly = msg;
-        if (msg.includes('429') || /quota|rate.?limit/i.test(msg)) {
-          friendly = 'Your current AI provider (' + provider + ') has reached its quota. Please retry later or switch to another configured provider.';
+        if (!navigator.onLine || /network|failed to fetch|net::/i.test(msg)) {
+          friendly = 'Network unavailable. Please check your internet connection and try again.';
+        } else if (msg.includes('429') || /quota|rate.?limit/i.test(msg)) {
+          friendly = 'Your ' + provider + ' quota is exhausted. Try again later or switch to another provider in Settings.';
         } else if (msg.includes('401') || msg.includes('403') || /key|unauthorized|invalid/i.test(msg)) {
-          friendly = 'Invalid API key for ' + provider + '. Please check your credentials in Settings.';
+          friendly = 'Invalid API key for ' + provider + '. Open Settings → API Configuration to update it.';
+        } else if (msg.includes('500') || msg.includes('503')) {
+          friendly = provider.charAt(0).toUpperCase() + provider.slice(1) + ' service is temporarily unavailable. Please try again in a few minutes.';
         } else {
           friendly = 'API Error (' + provider + '): ' + msg;
         }
         sendResponse({ success: false, error: friendly });
       });
+
 
     return true; // async
   }

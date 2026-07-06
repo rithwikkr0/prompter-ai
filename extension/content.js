@@ -130,10 +130,46 @@
   }
 
   // ─── Conversation Context ───────────────────────────────────────────────────
+  function getAttachments() {
+    var attachments = [];
+    // Generic selectors for uploaded files, chips, and image blobs on AI platforms
+    var selectors = [
+      '[data-testid*="attachment"]', '[class*="attachment"]',
+      '[class*="chip-container"] [class*="chip"]', '[class*="file-chip"]',
+      'img[src^="blob:"]', '[class*="file-preview"]', '[class*="file_chip"]',
+      '[data-testid="file-chip"]'
+    ];
+    try {
+      selectors.forEach(function (sel) {
+        document.querySelectorAll(sel).forEach(function (el) {
+          var text = (el.innerText || el.textContent || el.alt || '').trim();
+          // Filter out generic short icons or excessively long descriptions
+          if (text && text.length > 2 && text.length < 60 && !attachments.includes(text)) {
+            attachments.push(text);
+          }
+        });
+      });
+    } catch (_) {}
+    return attachments;
+  }
+
   function getConversationContext() {
     var parts = [];
     var maxTurns = 8;
 
+    // 1. Context Title
+    var title = (document.title || '').replace(/-(?:Gemini|ChatGPT|Claude|Perplexity|Copilot|Grok)/i, '').trim();
+    if (title && title.length < 100) {
+      parts.push('=== CONVERSATION TITLE ===\n' + title);
+    }
+
+    // 2. Active Attachments
+    var files = getAttachments();
+    if (files.length > 0) {
+      parts.push('=== ATTACHED FILES ===\n- ' + files.join('\n- '));
+    }
+
+    // 3. Messages History
     function trySelectors(selList) {
       for (var i = 0; i < selList.length; i++) {
         var els = document.querySelectorAll(selList[i]);
@@ -145,19 +181,26 @@
     var userEls      = trySelectors(PLAT.convUser);
     var assistantEls = trySelectors(PLAT.convAssistant);
 
+    var historyParts = [];
     var len = Math.min(Math.max(userEls.length, assistantEls.length), maxTurns);
     for (var k = 0; k < len; k++) {
       if (userEls[k]) {
         var ut = (userEls[k].innerText || '').trim().slice(0, 600);
-        if (ut) parts.push('User: ' + ut);
+        if (ut) historyParts.push('User: ' + ut);
       }
       if (assistantEls[k]) {
         var at = (assistantEls[k].innerText || '').trim().slice(0, 800);
-        if (at) parts.push('Assistant: ' + at);
+        if (at) historyParts.push('Assistant: ' + at);
       }
     }
+
+    if (historyParts.length > 0) {
+      parts.push('=== CHAT HISTORY ===\n' + historyParts.join('\n\n'));
+    }
+
     return parts.join('\n\n');
   }
+
 
   // ─── Notification (top-center, non-blocking) ────────────────────────────────
   var _notif = null;
@@ -330,7 +373,16 @@
   }
 
   function _createPanel() {
-    if (_panel) return;
+    var existing = document.getElementById('pf-panel');
+    if (existing) {
+      _panel = existing;
+      _enhTA = document.getElementById('pf-enhanced-ta');
+      return;
+    }
+    _panel = null;
+    _enhTA = null;
+    _diffView = null;
+
     _injectCSS();
 
     _panel = document.createElement('div');
@@ -726,8 +778,11 @@
       var model = (cfg.providerModels && cfg.providerModels[provider]) || cfg.preferredModel || '';
 
       if (!apiKey) {
-        showToast('Configure API Key for ' + provider + ' in Settings', 'error');
-        _openPanel();
+        _showError(
+          'No API key configured for ' + provider.charAt(0).toUpperCase() + provider.slice(1) + '.\n\n' +
+          'Open Settings → API Configuration → add your key.\n\n' +
+          'Keys are stored locally and never shared.'
+        );
         return;
       }
 
@@ -762,11 +817,16 @@
         _updateWidgetState('idle');
 
         if (chrome.runtime.lastError) {
-          _showError('Extension error: ' + chrome.runtime.lastError.message);
+          var errMsg = chrome.runtime.lastError.message || '';
+          if (/network|fetch|offline/i.test(errMsg)) {
+            _showError('No internet connection. Please check your network and try again.');
+          } else {
+            _showError('Extension error: ' + errMsg + '\n\nTry reloading the page.');
+          }
           return;
         }
-        if (!resp) { _showError('No response from background service.'); return; }
-        if (!resp.success) { _showError(resp.error || 'Enhancement failed. Please try again.'); return; }
+        if (!resp) { _showError('Background service unavailable. Try reloading the page.'); return; }
+        if (!resp.success) { _showError(resp.error || 'Enhancement failed. Please check your API key in Settings.'); return; }
 
         // Persist state
         S.lastOriginal = prompt;
@@ -798,15 +858,22 @@
   var _widget = null;
 
   function _buildWidget() {
-    if (_widget) return;
+    var existing = document.getElementById('pf-widget');
+    if (existing) {
+      _widget = existing;
+      return;
+    }
+    _widget = null;
+
 
     var CSS = '' +
       '<style>' +
       '@keyframes pfWPulse{0%,100%{box-shadow:0 4px 20px rgba(66,133,244,0.4),0 0 0 0 rgba(66,133,244,0.15)}' +
       '60%{box-shadow:0 4px 20px rgba(66,133,244,0.4),0 0 0 8px rgba(66,133,244,0)}}' +
       '@keyframes pfWSpin{to{transform:rotate(360deg)}}' +
-      '#pf-widget{position:fixed;bottom:76px;right:18px;z-index:2147483645;' +
-      'display:none;flex-direction:column;align-items:flex-end;gap:7px;' +
+      /* Widget is always fixed at bottom-right — visible whenever on a supported platform */
+      '#pf-widget{position:fixed;bottom:20px;right:20px;z-index:2147483645;' +
+      'display:flex;flex-direction:column;align-items:flex-end;gap:7px;' +
       'font-family:Inter,system-ui,sans-serif}' +
       '#pf-widget-subs{display:flex;flex-direction:column;gap:5px;align-items:flex-end;' +
       'opacity:0;transform:translateY(10px) scale(0.97);pointer-events:none;' +
@@ -842,6 +909,8 @@
       '</button>';
 
     document.body.appendChild(_widget);
+    // Widget is always visible on supported pages — no focus required
+    _widget.style.display = 'flex';
 
     var mainBtn = document.getElementById('pf-main-widget-btn');
     var subsEl  = document.getElementById('pf-widget-subs');
@@ -903,48 +972,25 @@
 
   function _positionWidget(inputEl) {
     if (!_widget) _buildWidget();
-    var rect = inputEl.getBoundingClientRect();
-    
-    // Position floating widget near active prompt box bottom-right
-    var top = rect.bottom - 56;
-    var left = rect.right - 58;
-    
-    // Viewport safety check
-    if (left < 10) left = 10;
-    if (left > window.innerWidth - 60) left = window.innerWidth - 60;
-    if (top < 10) top = 10;
-    if (top > window.innerHeight - 60) top = window.innerHeight - 60;
-    
-    _widget.style.position = 'fixed';
-    _widget.style.top = top + 'px';
-    _widget.style.left = left + 'px';
-    _widget.style.bottom = 'auto';
-    _widget.style.right = 'auto';
+    // Widget stays at bottom-right — always visible; just ensure it's shown
     _widget.style.display = 'flex';
   }
 
-  // ─── Focus / Blur Listeners (auto position and show) ──────────────────────────
-  var _hideTimer = null;
+  // ─── Focus Listener — highlight widget when prompt is focused ────────────────
   document.addEventListener('focus', function (e) {
-    clearTimeout(_hideTimer);
     var target = e.target;
-    var isInput = false;
+    if (!_widget) return;
     for (var i = 0; i < PLAT.inputSelectors.length; i++) {
       if (target.matches && target.matches(PLAT.inputSelectors[i])) {
-        isInput = true; break;
+        // Pulse the widget to indicate it's active — but don't hide on blur
+        var btn = document.getElementById('pf-main-widget-btn');
+        if (btn) {
+          btn.style.filter = 'brightness(1.15) saturate(1.3)';
+          setTimeout(function() { if (btn) btn.style.filter = ''; }, 600);
+        }
+        break;
       }
     }
-    if (isInput) {
-      _positionWidget(target);
-    }
-  }, true);
-
-  document.addEventListener('blur', function (e) {
-    _hideTimer = setTimeout(function () {
-      if (_widget && !document.activeElement.closest('#pf-widget')) {
-        _widget.style.display = 'none';
-      }
-    }, 350);
   }, true);
 
   // ─── Custom Event Listener (context menu / keyboard shortcut) ─────────────
@@ -956,7 +1002,33 @@
     _enhance(action, text || undefined);
   });
 
-  // ─── SPA Navigation — MutationObserver ────────────────────────────────────
+  // ─── History API Hook for SPA Navigation ────────────────────────────────────
+  (function (history) {
+    if (!history) return;
+    var pushState = history.pushState;
+    history.pushState = function () {
+      var ret = pushState.apply(history, arguments);
+      window.dispatchEvent(new Event('pushstate'));
+      window.dispatchEvent(new Event('locationchange'));
+      return ret;
+    };
+    var replaceState = history.replaceState;
+    history.replaceState = function () {
+      var ret = replaceState.apply(history, arguments);
+      window.dispatchEvent(new Event('replacestate'));
+      window.dispatchEvent(new Event('locationchange'));
+      return ret;
+    };
+    window.addEventListener('popstate', function () {
+      window.dispatchEvent(new Event('locationchange'));
+    });
+  })(window.history);
+
+  window.addEventListener('locationchange', function () {
+    _scheduleInit();
+  });
+
+  // ─── SPA Navigation & DOM Monitoring — MutationObserver ───────────────────────
   var _initTimer = null;
   function _scheduleInit() {
     clearTimeout(_initTimer);
@@ -965,16 +1037,24 @@
       if (!document.getElementById('pf-panel'))  { _panel = null; _enhTA = null; _diffView = null; }
       _buildWidget();
       if (S.lastResult && !_panel) { _createPanel(); }
-    }, 900);
+    }, 200); // reduced debounce latency for <100ms targets
   }
 
-  new MutationObserver(function (muts) {
-    for (var i = 0; i < muts.length; i++) {
-      if (muts[i].addedNodes.length && !document.getElementById('pf-widget')) {
-        _scheduleInit(); break;
+  // Debounced subtree observer to capture SPA DOM routing changes efficiently
+  // NOTE: We do NOT hide the widget if input not found — SPA may still be mounting
+  var _observerTimer = null;
+  var observer = new MutationObserver(function () {
+    if (_observerTimer) return;
+    _observerTimer = setTimeout(function () {
+      _observerTimer = null;
+      // If widget was removed by SPA re-render, rebuild it
+      if (!document.getElementById('pf-widget')) {
+        _widget = null;
+        _scheduleInit();
       }
-    }
-  }).observe(document.body, { childList: true, subtree: false });
+    }, 350);
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 
   // ─── Boot ──────────────────────────────────────────────────────────────────
   function _init() {

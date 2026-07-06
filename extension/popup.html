@@ -6,44 +6,45 @@
     <title>Prompter AI</title>
     <script>
       (function() {
-        var isTab = window.location.search.includes('context=tab') || 
-                    window.location.hash.includes('onboarding') || 
-                    window.location.hash.includes('history') || 
-                    window.location.hash.includes('templates') || 
-                    window.location.hash.includes('settings') || 
-                    window.location.hash.includes('about') ||
-                    (window.innerWidth > 480);
-        if (isTab) {
-          document.documentElement.classList.add('pf-tab-mode');
-        } else {
-          document.documentElement.classList.add('pf-popup-mode');
+        var isFullMode = window.location.search.includes('context=tab') || 
+                         window.location.search.includes('context=sidepanel') ||
+                         window.location.hash.includes('onboarding');
+        if (isFullMode) {
+          document.documentElement.classList.add('pf-full-mode');
         }
       })();
     </script>
     <style>
+      /* Statically set 400x580 dimensions by default to prevent Chrome Popup collapse */
       html, body {
         margin: 0;
         padding: 0;
-        width: 100%;
-        height: 100%;
-        background: transparent;
+        width: 400px;
+        height: 580px;
+        max-height: 640px;
+        overflow: hidden;
+        background: #060b1a; /* Sleek default dark background */
       }
       #root {
         width: 100%;
         height: 100%;
       }
-      html.pf-popup-mode, html.pf-popup-mode body {
-        width: 400px;
-        min-height: 580px;
-        max-height: 640px;
-        overflow: hidden;
+      
+      /* Overrides for tabs or side panels context */
+      html.pf-full-mode, html.pf-full-mode body {
+        width: 100% !important;
+        height: 100% !important;
+        max-width: none !important;
+        max-height: none !important;
+        overflow: auto !important;
+        background: transparent !important;
       }
-      html.pf-popup-mode #root {
-        width: 400px;
-        min-height: 580px;
-        overflow-y: auto;
+      html.pf-full-mode #root {
+        width: 100% !important;
+        height: 100% !important;
       }
     </style>
+
     <!-- Loads the compiled React app -->
     <script type="module" crossorigin src="./assets/index.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index.css">

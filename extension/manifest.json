@@ -11,7 +11,6 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_popup": "popup.html",
     "default_title": "Prompter AI",
     "default_icon": {
       "16": "icons/icon16.png",
@@ -26,8 +25,12 @@
     "contextMenus",
     "clipboardWrite",
     "notifications",
-    "tabs"
+    "tabs",
+    "sidePanel"
   ],
+  "side_panel": {
+    "default_path": "popup.html"
+  },
   "host_permissions": [
     "https://gemini.google.com/*",
     "https://chat.openai.com/*",
