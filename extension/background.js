@@ -450,6 +450,103 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
     return true; // async
   }
 
+  // ── Record analytics event ──
+  if (message.type === 'RECORD_ANALYTICS') {
+    chrome.storage.local.get(['prompter_analytics'], function(result) {
+      var analytics = Array.isArray(result.prompter_analytics) ? result.prompter_analytics : [];
+      var entry = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+        date: new Date().toISOString().split('T')[0],
+        platform: message.platform || 'unknown',
+        provider: message.provider || 'unknown',
+        action: message.action || 'enhance',
+        category: message.category || 'general',
+        qualityScore: message.qualityScore || 0,
+        improved: !!message.improved,
+        interviewUsed: !!message.interviewUsed,
+      };
+      analytics.unshift(entry);
+      if (analytics.length > 500) analytics = analytics.slice(0, 500);
+      chrome.storage.local.set({ prompter_analytics: analytics });
+    });
+    return false;
+  }
+
+  // ── Get analytics ──
+  if (message.type === 'GET_ANALYTICS') {
+    chrome.storage.local.get(['prompter_analytics'], function(result) {
+      sendResponse({ analytics: result.prompter_analytics || [] });
+    });
+    return true;
+  }
+
+  // ── Save interview preferences ──
+  if (message.type === 'SAVE_INTERVIEW_PREFS') {
+    chrome.storage.local.get(['prompter_interview_prefs'], function(result) {
+      var prefs = result.prompter_interview_prefs || {};
+      var category = message.category || 'general';
+      prefs[category] = Object.assign({}, prefs[category] || {}, message.answers || {});
+      chrome.storage.local.set({ prompter_interview_prefs: prefs }, function() {
+        sendResponse({ success: true });
+      });
+    });
+    return true;
+  }
+
+  // ── Get interview preferences ──
+  if (message.type === 'GET_INTERVIEW_PREFS') {
+    chrome.storage.local.get(['prompter_interview_prefs'], function(result) {
+      sendResponse({ prefs: result.prompter_interview_prefs || {} });
+    });
+    return true;
+  }
+
+  // ── Score Prompt Completeness ──
+  if (message.type === 'SCORE_PROMPT') {
+    var prompt = message.prompt || '';
+    var score = 0;
+    
+    // 1. Has clear action verb?
+    var verbs = /\b(write|create|explain|build|design|analyze|debug|rewrite|draft|summarize|translate|optimize|code|generate|develop|implement|compare|review)\b/i;
+    if (verbs.test(prompt)) score += 20;
+    
+    // 2. Has clear subject/topic?
+    var words = prompt.trim().split(/\s+/);
+    if (words.length > 3) score += 20;
+    
+    // 3. Specifies output format?
+    var formats = /\b(markdown|code|bullet|list|json|yaml|table|report|summary|essay|guide|step-by-step|pdf|csv)\b/i;
+    if (formats.test(prompt)) score += 15;
+    
+    // 4. Target audience/context?
+    var context = /\b(beginner|student|developer|professional|researcher|executive|manager|expert|child|public|for my|for a)\b/i;
+    if (context.test(prompt)) score += 15;
+    
+    // 5. Length > 40 characters?
+    if (prompt.length > 40) score += 15;
+    
+    // 6. Constraints/requirements?
+    var constraints = /\b(limit|maximum|minimum|under|only|must|should|avoid|don't|do not|without|using)\b/i;
+    if (constraints.test(prompt)) score += 15;
+
+    // Estimate category/intent from keywords
+    var category = 'general';
+    if (/\b(python|javascript|typescript|js|ts|html|css|react|vue|node|code|programming|function|class|bug|error|exception|debug|compile|rust|golang|c\+\+|java)\b/i.test(prompt)) {
+      category = 'coding';
+    } else if (/\b(image|picture|photo|art|drawing|painting|style|render|aspect ratio|lighting|visual|illustration)\b/i.test(prompt)) {
+      category = 'image-generation';
+    } else if (/\b(research|paper|study|academic|thesis|citation|source|journal|literature)\b/i.test(prompt)) {
+      category = 'research';
+    } else if (/\b(essay|story|article|blog|writing|poem|draft|sentence|grammar|paragraph)\b/i.test(prompt)) {
+      category = 'writing';
+    } else if (/\b(business|marketing|startup|pitch|sales|kpi|customer|revenue|strategy|product)\b/i.test(prompt)) {
+      category = 'business';
+    }
+
+    sendResponse({ score: score, category: category });
+    return false;
+  }
+
   return false;
 });
 

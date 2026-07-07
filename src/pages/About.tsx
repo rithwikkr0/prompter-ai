@@ -48,7 +48,7 @@ export function AboutPage() {
         </p>
         <div className="flex items-center justify-center gap-3 mt-5">
           <a
-            href="https://github.com"
+            href="https://github.com/rithwikkr0/prompter-ai"
             target="_blank"
             rel="noreferrer"
             className="btn-secondary text-sm"
@@ -109,12 +109,12 @@ export function AboutPage() {
       {/* Credits */}
       <div className="glass-card-static p-5 text-center">
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Built for the{' '}
-          <span className="font-semibold text-primary-500">Google Builder Series</span>
+          Built by{' '}
+          <span className="font-semibold text-primary-500">Rithwik KR</span>
           {' '}with ❤️ and ✨
         </p>
         <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
-          Powered by Gemini AI · © 2024 Prompter AI
+          Powered by Gemini AI · © 2026 Prompter AI
         </p>
       </div>
     </div>

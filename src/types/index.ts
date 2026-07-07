@@ -128,3 +128,31 @@ export const CATEGORY_META: Record<string, CategoryMeta> = {
   writing: { id: 'writing', label: 'Writing', icon: '✍️', color: '#B45309' },
   general: { id: 'general', label: 'General', icon: '⚡', color: '#6B7280' },
 };
+
+// ─── v2.0 Types ──────────────────────────────────────────────────────────
+export const AnalyticsEntrySchema = z.object({
+  id: z.string(),
+  date: z.string(),
+  platform: z.string(),
+  provider: z.string(),
+  action: z.string(),
+  category: z.string(),
+  qualityScore: z.number(),
+  improved: z.boolean(),
+  interviewUsed: z.boolean(),
+});
+export type AnalyticsEntry = z.infer<typeof AnalyticsEntrySchema>;
+
+export const InterviewPreferencesSchema = z.record(
+  z.string(),
+  z.record(z.string(), z.string())
+);
+export type InterviewPreferences = z.infer<typeof InterviewPreferencesSchema>;
+
+export const WidgetPositionSchema = z.object({
+  top: z.number().optional(),
+  left: z.number().optional(),
+  right: z.number().optional(),
+  bottom: z.number().optional(),
+});
+export type WidgetPosition = z.infer<typeof WidgetPositionSchema>;

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles, History, LayoutTemplate, Settings, Info,
   Zap, Moon, Sun, Monitor, ChevronRight, Menu, X,
+  Star, BarChart3, Keyboard, HelpCircle
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useSettings } from '../contexts';
@@ -10,8 +11,12 @@ import { useSettings } from '../contexts';
 const NAV = [
   { to: '/', icon: Sparkles, label: 'Dashboard', exact: true },
   { to: '/history', icon: History, label: 'History' },
+  { to: '/favorites', icon: Star, label: 'Favorites' },
   { to: '/templates', icon: LayoutTemplate, label: 'Templates' },
+  { to: '/analytics', icon: BarChart3, label: 'Analytics' },
+  { to: '/shortcuts', icon: Keyboard, label: 'Shortcuts' },
   { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/help', icon: HelpCircle, label: 'Help' },
   { to: '/about', icon: Info, label: 'About' },
 ];
 
@@ -78,7 +83,7 @@ export function Layout() {
               className="overflow-hidden"
             >
               <span className="font-bold text-base gradient-text whitespace-nowrap">Prompter</span>
-              <span className="text-xs block whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>AI v1.0</span>
+              <span className="text-xs block whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>AI v2.0</span>
             </motion.div>
           )}
         </AnimatePresence>

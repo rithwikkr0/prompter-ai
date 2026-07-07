@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Prompter AI",
   "short_name": "Prompter",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "AI-powered prompt engineering assistant that enhances prompts directly inside AI platforms.",
   "icons": {
     "16": "icons/icon16.png",

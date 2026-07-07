@@ -1,4 +1,4 @@
-import type { UserSettings, HistoryEntry, Template } from '../types';
+import type { UserSettings, HistoryEntry, Template, AnalyticsEntry, InterviewPreferences, WidgetPosition } from '../types';
 
 // ─── Chrome type shim (works in both extension and PWA contexts) ──────────────
 declare const chrome: {
@@ -159,5 +159,31 @@ export const storage = {
       .filter((v, i, a) => a.findIndex((x) => x.id === v.id) === i)
       .slice(0, 100);
     await set(KEYS.HISTORY, merged);
+  },
+
+  // Analytics
+  getAnalytics: () => get<AnalyticsEntry[]>('prompter_analytics', []),
+  async recordAnalytics(entry: Omit<AnalyticsEntry, 'id'>): Promise<void> {
+    const analytics = await get<AnalyticsEntry[]>('prompter_analytics', []);
+    const newEntry: AnalyticsEntry = { ...entry, id: Date.now().toString(36) + Math.random().toString(36).slice(2) };
+    const updated = [newEntry, ...analytics].slice(0, 500); // max 500 entries
+    await set('prompter_analytics', updated);
+  },
+  async clearAnalytics(): Promise<void> {
+    await set('prompter_analytics', []);
+  },
+
+  // Interview Preferences
+  getInterviewPreferences: () => get<InterviewPreferences>('prompter_interview_prefs', {}),
+  async saveInterviewPreferences(prefs: InterviewPreferences): Promise<void> {
+    await set('prompter_interview_prefs', prefs);
+  },
+
+  // Widget positions per hostname
+  getWidgetPositions: () => get<Record<string, WidgetPosition>>('prompter_widget_positions', {}),
+  async saveWidgetPosition(hostname: string, pos: WidgetPosition): Promise<void> {
+    const positions = await get<Record<string, WidgetPosition>>('prompter_widget_positions', {});
+    positions[hostname] = pos;
+    await set('prompter_widget_positions', positions);
   },
 };

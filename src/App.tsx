@@ -9,6 +9,10 @@ import { TemplatesPage } from './pages/Templates';
 import { SettingsPage } from './pages/Settings';
 import { AboutPage } from './pages/About';
 import { OnboardingPage } from './pages/Onboarding';
+import { FavoritesPage } from './pages/Favorites';
+import { AnalyticsPage } from './pages/Analytics';
+import { ShortcutsPage } from './pages/Shortcuts';
+import { HelpPage } from './pages/Help';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 1000 * 60 * 5 } },
@@ -61,8 +65,12 @@ function AppRoutes() {
       <Route element={needsOnboarding ? <Navigate to="/onboarding" replace /> : <Layout />}>
         <Route index element={<DashboardPage />} />
         <Route path="/history" element={<HistoryPage />} />
+        <Route path="/favorites" element={<FavoritesPage />} />
         <Route path="/templates" element={<TemplatesPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/shortcuts" element={<ShortcutsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/help" element={<HelpPage />} />
         <Route path="/about" element={<AboutPage />} />
         {/* Catch-all falls back to dashboard */}
         <Route path="*" element={<Navigate to="/" replace />} />

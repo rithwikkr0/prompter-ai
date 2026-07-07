@@ -1,5 +1,5 @@
-// Prompter AI — Content Script v3.0
-// Right-Side Assistant Panel + Conversation Awareness + Full Structured Analysis
+// Prompter AI — Content Script v4.0 (v2.0 Release Upgrade)
+// Right-Side Assistant Panel + Draggable Widget + Smart Interview Mode + Conversation Awareness
 // Plain JavaScript only — no TypeScript syntax (MV3 content script)
 
 (function () {
@@ -132,7 +132,6 @@
   // ─── Conversation Context ───────────────────────────────────────────────────
   function getAttachments() {
     var attachments = [];
-    // Generic selectors for uploaded files, chips, and image blobs on AI platforms
     var selectors = [
       '[data-testid*="attachment"]', '[class*="attachment"]',
       '[class*="chip-container"] [class*="chip"]', '[class*="file-chip"]',
@@ -143,7 +142,6 @@
       selectors.forEach(function (sel) {
         document.querySelectorAll(sel).forEach(function (el) {
           var text = (el.innerText || el.textContent || el.alt || '').trim();
-          // Filter out generic short icons or excessively long descriptions
           if (text && text.length > 2 && text.length < 60 && !attachments.includes(text)) {
             attachments.push(text);
           }
@@ -200,7 +198,6 @@
 
     return parts.join('\n\n');
   }
-
 
   // ─── Notification (top-center, non-blocking) ────────────────────────────────
   var _notif = null;
@@ -269,7 +266,6 @@
   }
 
   function wordDiffHTML(orig, enh) {
-    // Mark words in enhanced that are new (not in original)
     var origSet = new Set((orig.match(/\b\w{4,}\b/g) || []).map(function (w) { return w.toLowerCase(); }));
     return (enh || '').split(/\b/).map(function (tok) {
       var clean = tok.toLowerCase().replace(/[^a-z]/g, '');
@@ -432,6 +428,19 @@
           '<div style="font-size:11px;color:rgba(255,255,255,0.3)">Reading conversation context…</div>' +
         '</div>' +
 
+        // Smart Interview questionnaire state
+        '<div id="pf-interview" style="display:none" class="pf-fade-in">' +
+          '<div style="font-size:12px;font-weight:700;color:#f1f5f9;margin-bottom:4px">Smart Prompt Interview</div>' +
+          '<div style="font-size:10.5px;color:rgba(255,255,255,0.4);line-height:1.4;margin-bottom:12px">' +
+            'Providing a few more requirements will significantly improve your AI results.' +
+          '</div>' +
+          '<div id="pf-interview-questions" style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px"></div>' +
+          '<div style="display:flex;flex-direction:column;gap:6px">' +
+            '<button class="pf-btn pf-btn-primary" id="pf-interview-submit" style="width:100%">✨ Enhance with Context</button>' +
+            '<button class="pf-btn pf-btn-ghost" id="pf-interview-skip" style="width:100%">Skip & Enhance Directly</button>' +
+          '</div>' +
+        '</div>' +
+
         // Result state
         '<div id="pf-result" style="display:none" class="pf-fade-in">' +
 
@@ -522,7 +531,6 @@
 
   function _openPanel() {
     if (!_panel) _createPanel();
-    // Small rAF to ensure the element is in DOM before animating
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
         _panel.classList.add('pf-open');
@@ -538,7 +546,7 @@
 
   // ── Panel state views ──────────────────────────────────────────────────────
   function _setView(which) {
-    var views = { idle: '#pf-idle', loading: '#pf-loading', result: '#pf-result' };
+    var views = { idle: '#pf-idle', loading: '#pf-loading', result: '#pf-result', interview: '#pf-interview' };
     Object.keys(views).forEach(function (k) {
       var el = document.getElementById(views[k].slice(1));
       if (el) el.style.display = k === which ? 'block' : 'none';
@@ -557,11 +565,9 @@
     if (!_panel) _createPanel();
     _setView('result');
 
-    // Score ring
     var ring = document.getElementById('pf-score-ring');
     if (ring && result.qualityScore !== undefined) ring.innerHTML = scoreRingHTML(result.qualityScore);
 
-    // Intent tag
     var intentEl = document.getElementById('pf-intent-tag');
     if (intentEl && result.intent) {
       var col = categoryColor(result.intent.category);
@@ -569,15 +575,12 @@
         ';border:1px solid ' + col + '33">' + _esc(result.intent.label || result.intent.category) + '</span>';
     }
 
-    // Confidence
     var confEl = document.getElementById('pf-confidence');
     if (confEl && result.intent) confEl.textContent = 'Confidence: ' + result.intent.confidence + '%';
 
-    // Explanation
     var expEl = document.getElementById('pf-explanation');
     if (expEl && result.explanation) expEl.textContent = result.explanation;
 
-    // Missing context pills
     var missingCard = document.getElementById('pf-missing-card');
     var missingTags = document.getElementById('pf-missing-tags');
     if (missingCard && missingTags) {
@@ -592,7 +595,6 @@
       }
     }
 
-    // Improvements
     var imprCard = document.getElementById('pf-impr-card');
     var imprList = document.getElementById('pf-impr-list');
     var imprCount = document.getElementById('pf-impr-count');
@@ -613,10 +615,8 @@
       imprCard.style.display = 'none';
     }
 
-    // Enhanced textarea
     if (_enhTA) {
       _enhTA.value = result.enhancedPrompt || '';
-      // Reset diff state
       if (_diffView && _diffView.parentNode) { _diffView.remove(); _diffView = null; }
       _enhTA.style.display = '';
       var diffBtn = document.getElementById('pf-diff-btn');
@@ -624,7 +624,6 @@
       S.showingDiff = false;
     }
 
-    // Restore fav state
     var favBtn = document.getElementById('pf-fav-btn');
     if (favBtn) favBtn.textContent = S.isFavorite ? '★' : '☆';
 
@@ -685,6 +684,13 @@
         showToast('Copied to clipboard (direct insert unavailable)', 'success');
       }).catch(function () { showToast('Could not insert or copy prompt', 'error'); });
     }
+
+    // Record that they accepted/improved the prompt
+    chrome.runtime.sendMessage({
+      type: 'RECORD_ANALYTICS',
+      platform: PLAT.name,
+      improved: true
+    });
   }
 
   function _copyEnhanced() {
@@ -757,6 +763,152 @@
     } catch (e) { showToast('Export failed', 'error'); }
   }
 
+  // ─── Adaptive Question Banks ────────────────────────────────────────────────
+  var INTERVIEW_QUESTIONS = {
+    coding: [
+      { id: 'language', q: 'Programming Language', opts: ['Python', 'JavaScript', 'TypeScript', 'Go', 'Rust', 'Java', 'C++', 'Other'] },
+      { id: 'output', q: 'Expected Output', opts: ['Full code implementation', 'Snippet / Code block', 'With step explanation', 'With Unit Tests'] },
+      { id: 'framework', q: 'Framework / Environment', opts: ['React', 'Vue', 'Node.js', 'Django', 'FastAPI', 'None / Plain'] }
+    ],
+    'image-generation': [
+      { id: 'style', q: 'Artistic Style', opts: ['Photorealistic', 'Digital illustration', 'Oil painting', 'Vector logo', 'Anime / Manga', '3D render'] },
+      { id: 'lighting', q: 'Mood & Lighting', opts: ['Bright & vibrant', 'Dark & moody', 'Cinematic', 'Soft studio lighting', 'Golden hour natural'] },
+      { id: 'ratio', q: 'Aspect Ratio', opts: ['1:1 Square', '16:9 Landscape', '9:16 Portrait', '4:3 Standard'] }
+    ],
+    research: [
+      { id: 'level', q: 'Target Audience / Level', opts: ['General public', 'Undergraduate student', 'Professional executive', 'Scientific / Academic researcher'] },
+      { id: 'format', q: 'Output Format', opts: ['Executive summary', 'Comprehensive review', 'Bullet point outline', 'Draft report'] },
+      { id: 'range', q: 'Date / Time Range', opts: ['Recent (past year)', 'Historical', 'No constraint'] }
+    ],
+    writing: [
+      { id: 'tone', q: 'Tone of Voice', opts: ['Professional', 'Casual / Conversational', 'Creative / Storyteller', 'Academic / Strict', 'Persuasive'] },
+      { id: 'length', q: 'Target Length', opts: ['Very short (<150 words)', 'Medium (300-800 words)', 'Long (800+ words)'] },
+      { id: 'format', q: 'Writing Format', opts: ['Blog post', 'Formal email', 'Essay / Article', 'Social media caption'] }
+    ],
+    business: [
+      { id: 'goal', q: 'Strategic Objective', opts: ['Inform / Educate', 'Increase conversions', 'Solve a problem', 'Pitch investors'] },
+      { id: 'audience', q: 'Target Audience', opts: ['C-Suite / Executives', 'Customers / Clients', 'Internal team', 'General public'] },
+      { id: 'tone', q: 'Tone', opts: ['Executive', 'Friendly / Accessible', 'Consultative', 'Data-driven'] }
+    ],
+    general: [
+      { id: 'goal', q: 'Primary Goal', opts: ['Learn a topic', 'Create content', 'Troubleshoot / Debug', 'Generate ideas'] },
+      { id: 'format', q: 'Preferred Format', opts: ['Bullet points', 'Detailed guide', 'Structured table', 'Conversational'] },
+      { id: 'style', q: 'Response Style', opts: ['Concise & direct', 'Detailed & analytical', 'Creative'] }
+    ]
+  };
+
+  // ─── Smart Interview State & Rendering ──────────────────────────────────────
+  var _selectedAnswers = {};
+
+  function _showInterview(category, prompt, action) {
+    if (!_panel) _createPanel();
+    _setView('interview');
+    _openPanel();
+
+    var questions = INTERVIEW_QUESTIONS[category] || INTERVIEW_QUESTIONS.general;
+    var container = document.getElementById('pf-interview-questions');
+    if (!container) return;
+
+    container.innerHTML = '';
+    _selectedAnswers = {};
+
+    chrome.runtime.sendMessage({ type: 'GET_INTERVIEW_PREFS' }, function (res) {
+      var savedPrefs = (res && res.prefs && res.prefs[category]) || {};
+      
+      questions.forEach(function (q) {
+        var card = document.createElement('div');
+        card.className = 'pf-card';
+        card.style.padding = '10px';
+        card.style.marginBottom = '6px';
+        
+        var qTitle = document.createElement('div');
+        qTitle.className = 'pf-label';
+        qTitle.style.marginBottom = '6px';
+        qTitle.textContent = q.q;
+        card.appendChild(qTitle);
+
+        var pillsContainer = document.createElement('div');
+        pillsContainer.style.display = 'flex';
+        pillsContainer.style.flexWrap = 'wrap';
+        pillsContainer.style.gap = '5px';
+
+        var selectedOpt = savedPrefs[q.id] || '';
+        _selectedAnswers[q.id] = selectedOpt;
+
+        q.opts.forEach(function (opt) {
+          var pill = document.createElement('span');
+          pill.textContent = opt;
+          pill.style.fontSize = '10px';
+          pill.style.padding = '4px 8px';
+          pill.style.borderRadius = '10px';
+          pill.style.border = '1px solid rgba(255,255,255,0.08)';
+          pill.style.cursor = 'pointer';
+          pill.style.transition = 'all 0.15s';
+          
+          function updatePillStyle() {
+            var active = _selectedAnswers[q.id] === opt;
+            pill.style.background = active ? 'rgba(66, 133, 244, 0.15)' : 'rgba(255,255,255,0.02)';
+            pill.style.color = active ? '#93c5fd' : 'rgba(255,255,255,0.6)';
+            pill.style.borderColor = active ? 'rgba(66, 133, 244, 0.4)' : 'rgba(255,255,255,0.08)';
+          }
+
+          updatePillStyle();
+
+          pill.addEventListener('click', function () {
+            _selectedAnswers[q.id] = opt;
+            Array.from(pillsContainer.children).forEach(function (sib) {
+              var siblingActive = sib.textContent === opt;
+              sib.style.background = siblingActive ? 'rgba(66, 133, 244, 0.15)' : 'rgba(255,255,255,0.02)';
+              sib.style.color = siblingActive ? '#93c5fd' : 'rgba(255,255,255,0.6)';
+              sib.style.borderColor = siblingActive ? 'rgba(66, 133, 244, 0.4)' : 'rgba(255,255,255,0.08)';
+            });
+          });
+
+          pillsContainer.appendChild(pill);
+        });
+
+        card.appendChild(pillsContainer);
+        container.appendChild(card);
+      });
+    });
+
+    var submitBtn = document.getElementById('pf-interview-submit');
+    var skipBtn = document.getElementById('pf-interview-skip');
+
+    var newSubmit = submitBtn.cloneNode(true);
+    submitBtn.parentNode.replaceChild(newSubmit, submitBtn);
+    
+    var newSkip = skipBtn.cloneNode(true);
+    skipBtn.parentNode.replaceChild(newSkip, skipBtn);
+
+    newSubmit.addEventListener('click', function () {
+      chrome.runtime.sendMessage({
+        type: 'SAVE_INTERVIEW_PREFS',
+        category: category,
+        answers: _selectedAnswers
+      });
+
+      var contextParts = [];
+      Object.keys(_selectedAnswers).forEach(function (key) {
+        if (_selectedAnswers[key]) {
+          var qObj = questions.find(function(x) { return x.id === key; });
+          var qLabel = qObj ? qObj.q : key;
+          contextParts.push(qLabel + ': ' + _selectedAnswers[key]);
+        }
+      });
+      var contextAnnotation = '';
+      if (contextParts.length > 0) {
+        contextAnnotation = '\n\n=== ADDITIONAL USER PREFERENCES ===\n- ' + contextParts.join('\n- ');
+      }
+
+      _doEnhance(prompt, action, contextAnnotation, true);
+    });
+
+    newSkip.addEventListener('click', function () {
+      _doEnhance(prompt, action, '', false);
+    });
+  }
+
   // ─── Core Enhancement Logic ──────────────────────────────────────────────────
   var _busy = false;
 
@@ -771,6 +923,31 @@
       return;
     }
 
+    _updateWidgetState('loading');
+    _showLoading('Scoring prompt quality...');
+
+    chrome.runtime.sendMessage({
+      type: 'SCORE_PROMPT',
+      prompt: prompt
+    }, function (scoreResp) {
+      _updateWidgetState('idle');
+      if (chrome.runtime.lastError || !scoreResp) {
+        _doEnhance(prompt, action, '', false);
+        return;
+      }
+
+      var score = scoreResp.score || 0;
+      var category = scoreResp.category || 'general';
+
+      if (score >= 75) {
+        _doEnhance(prompt, action, '', false);
+      } else {
+        _showInterview(category, prompt, action);
+      }
+    });
+  }
+
+  function _doEnhance(prompt, action, contextAnnotation, interviewUsed) {
     chrome.storage.local.get(['prompter_settings', 'promptforge_settings'], function (stored) {
       var cfg = stored.prompter_settings || stored.promptforge_settings || {};
       var provider = cfg.provider || 'gemini';
@@ -790,7 +967,6 @@
       S.isFavorite = false;
       S.showingDiff = false;
 
-      // Reset diff UI
       if (_diffView && _diffView.parentNode) { _diffView.remove(); _diffView = null; }
       var diffBtn = document.getElementById('pf-diff-btn');
       if (diffBtn) diffBtn.classList.remove('active');
@@ -805,7 +981,7 @@
 
       chrome.runtime.sendMessage({
         type: 'GET_ENHANCEMENT',
-        prompt: prompt,
+        prompt: prompt + (contextAnnotation || ''),
         apiKey: apiKey,
         model: model,
         provider: provider,
@@ -828,7 +1004,6 @@
         if (!resp) { _showError('Background service unavailable. Try reloading the page.'); return; }
         if (!resp.success) { _showError(resp.error || 'Enhancement failed. Please check your API key in Settings.'); return; }
 
-        // Persist state
         S.lastOriginal = prompt;
         S.lastResult = resp.result || {
           qualityScore: 72,
@@ -841,7 +1016,6 @@
 
         _showResult(S.lastResult);
 
-        // Background housekeeping
         chrome.runtime.sendMessage({ type: 'INCREMENT_BADGE' });
         chrome.runtime.sendMessage({
           type: 'SAVE_HISTORY',
@@ -849,6 +1023,18 @@
           enhanced: S.lastResult.enhancedPrompt,
           action: action,
           platform: PLAT.name,
+        });
+
+        // Record initial analytics event
+        chrome.runtime.sendMessage({
+          type: 'RECORD_ANALYTICS',
+          platform: PLAT.name,
+          provider: provider,
+          action: action,
+          category: S.lastResult.intent.category || 'general',
+          qualityScore: S.lastResult.qualityScore || 0,
+          improved: false,
+          interviewUsed: !!interviewUsed
         });
       });
     });
@@ -865,16 +1051,15 @@
     }
     _widget = null;
 
-
     var CSS = '' +
       '<style>' +
       '@keyframes pfWPulse{0%,100%{box-shadow:0 4px 20px rgba(66,133,244,0.4),0 0 0 0 rgba(66,133,244,0.15)}' +
       '60%{box-shadow:0 4px 20px rgba(66,133,244,0.4),0 0 0 8px rgba(66,133,244,0)}}' +
       '@keyframes pfWSpin{to{transform:rotate(360deg)}}' +
-      /* Widget is always fixed at bottom-right — visible whenever on a supported platform */
       '#pf-widget{position:fixed;bottom:20px;right:20px;z-index:2147483645;' +
       'display:flex;flex-direction:column;align-items:flex-end;gap:7px;' +
-      'font-family:Inter,system-ui,sans-serif}' +
+      'font-family:Inter,system-ui,sans-serif;cursor:grab}' +
+      '#pf-widget:active{cursor:grabbing}' +
       '#pf-widget-subs{display:flex;flex-direction:column;gap:5px;align-items:flex-end;' +
       'opacity:0;transform:translateY(10px) scale(0.97);pointer-events:none;' +
       'transition:opacity 0.2s,transform 0.2s cubic-bezier(0.34,1.56,0.64,1)}' +
@@ -905,12 +1090,24 @@
           '📊 Assistant Panel</button>' +
       '</div>' +
       '<button id="pf-main-widget-btn" title="Enhance Prompt — Ctrl+Shift+E">' +
+        '<span style="font-size:8px;position:absolute;top:2px;opacity:0.35">⠿</span>' +
         '<span id="pf-wi">✨</span>' +
       '</button>';
 
     document.body.appendChild(_widget);
-    // Widget is always visible on supported pages — no focus required
     _widget.style.display = 'flex';
+
+    // Restore saved widget coordinates
+    chrome.storage.local.get(['prompter_widget_positions'], function (res) {
+      var positions = res.prompter_widget_positions || {};
+      var pos = positions[hostname];
+      if (pos && pos.top !== undefined && pos.left !== undefined) {
+        _widget.style.top = pos.top + 'px';
+        _widget.style.left = pos.left + 'px';
+        _widget.style.bottom = 'auto';
+        _widget.style.right = 'auto';
+      }
+    });
 
     var mainBtn = document.getElementById('pf-main-widget-btn');
     var subsEl  = document.getElementById('pf-widget-subs');
@@ -921,8 +1118,50 @@
       subsEl.classList.toggle('pf-xs-open', _expanded);
     }
 
+    var isDragging = false;
+    var startX, startY, initialLeft, initialTop;
+
+    // Draggable behavior on mousedown
+    mainBtn.addEventListener('mousedown', function (e) {
+      isDragging = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      initialLeft = _widget.offsetLeft;
+      initialTop = _widget.offsetTop;
+
+      function onMouseMove(moveEv) {
+        var dx = moveEv.clientX - startX;
+        var dy = moveEv.clientY - startY;
+        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+          isDragging = true;
+          _widget.style.left = (initialLeft + dx) + 'px';
+          _widget.style.top = (initialTop + dy) + 'px';
+          _widget.style.bottom = 'auto';
+          _widget.style.right = 'auto';
+        }
+      }
+
+      function onMouseUp(upEv) {
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+        
+        if (isDragging) {
+          var pos = { top: _widget.offsetTop, left: _widget.offsetLeft };
+          chrome.storage.local.get(['prompter_widget_positions'], function(res) {
+            var positions = res.prompter_widget_positions || {};
+            positions[hostname] = pos;
+            chrome.storage.local.set({ prompter_widget_positions: positions });
+          });
+        }
+      }
+
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    });
+
     mainBtn.addEventListener('click', function (e) {
       e.stopPropagation();
+      if (isDragging) return; 
       if (getPromptText()) {
         if (_expanded) toggleSubs();
         _enhance('enhance');
@@ -972,7 +1211,6 @@
 
   function _positionWidget(inputEl) {
     if (!_widget) _buildWidget();
-    // Widget stays at bottom-right — always visible; just ensure it's shown
     _widget.style.display = 'flex';
   }
 
@@ -982,7 +1220,6 @@
     if (!_widget) return;
     for (var i = 0; i < PLAT.inputSelectors.length; i++) {
       if (target.matches && target.matches(PLAT.inputSelectors[i])) {
-        // Pulse the widget to indicate it's active — but don't hide on blur
         var btn = document.getElementById('pf-main-widget-btn');
         if (btn) {
           btn.style.filter = 'brightness(1.15) saturate(1.3)';
@@ -1037,29 +1274,27 @@
       if (!document.getElementById('pf-panel'))  { _panel = null; _enhTA = null; _diffView = null; }
       _buildWidget();
       if (S.lastResult && !_panel) { _createPanel(); }
-    }, 200); // reduced debounce latency for <100ms targets
+    }, 200);
   }
 
-  // Debounced subtree observer to capture SPA DOM routing changes efficiently
-  // NOTE: We do NOT hide the widget if input not found — SPA may still be mounting
+  // Observe documentElement (captures body swapping/re-render cleanly)
   var _observerTimer = null;
   var observer = new MutationObserver(function () {
     if (_observerTimer) return;
     _observerTimer = setTimeout(function () {
       _observerTimer = null;
-      // If widget was removed by SPA re-render, rebuild it
       if (!document.getElementById('pf-widget')) {
         _widget = null;
         _scheduleInit();
       }
     }, 350);
   });
-  observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
 
   // ─── Boot ──────────────────────────────────────────────────────────────────
   function _init() {
     _buildWidget();
-    if (S.lastResult) { _createPanel(); } // restore last result into panel
+    if (S.lastResult) { _createPanel(); }
   }
 
   if (document.readyState === 'loading') {
