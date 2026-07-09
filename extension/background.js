@@ -110,6 +110,12 @@ function updateBadge(count) {
 // ─── Message Handler ──────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
 
+  // ── Keep alive heartbeat ──
+  if (message.type === 'KEEPALIVE') {
+    sendResponse({ alive: true });
+    return false;
+  }
+
   // ── Open specific dashboard route in a new tab ──
   if (message.type === 'OPEN_ROUTE') {
     var route = message.route || '/';

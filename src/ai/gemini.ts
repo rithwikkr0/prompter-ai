@@ -58,6 +58,14 @@ export async function enhancePrompt(
   const ext = typeof chrome !== 'undefined' ? chrome : null;
   if (ext && ext.runtime) {
     return new Promise((resolve, reject) => {
+      // Start keepalive heartbeat
+      const keepAliveInterval = setInterval(() => {
+        ext.runtime.sendMessage({ type: 'KEEPALIVE' }, () => {
+          // ignore error if context is closed
+          if (typeof chrome !== 'undefined' && chrome.runtime?.lastError) {}
+        });
+      }, 10000);
+
       ext.runtime.sendMessage({
         type: 'GET_ENHANCEMENT',
         prompt,
@@ -67,6 +75,7 @@ export async function enhancePrompt(
         conversationContext,
         action
       }, (response: any) => {
+        clearInterval(keepAliveInterval);
         const runtimeErr = typeof chrome !== 'undefined' ? chrome.runtime.lastError : null;
         if (runtimeErr) {
           reject(new Error(runtimeErr.message));
@@ -100,12 +109,20 @@ export async function testApiKey(
   const ext = typeof chrome !== 'undefined' ? chrome : null;
   if (ext && ext.runtime) {
     return new Promise((resolve) => {
+      // Start keepalive heartbeat
+      const keepAliveInterval = setInterval(() => {
+        ext.runtime.sendMessage({ type: 'KEEPALIVE' }, () => {
+          if (typeof chrome !== 'undefined' && chrome.runtime?.lastError) {}
+        });
+      }, 10000);
+
       ext.runtime.sendMessage({
         type: 'TEST_PROVIDER_CONNECTION',
         provider,
         apiKey,
         model: preferredModel
       }, (response: any) => {
+        clearInterval(keepAliveInterval);
         const runtimeErr = typeof chrome !== 'undefined' ? chrome.runtime.lastError : null;
         if (runtimeErr) {
           resolve({ valid: false, error: runtimeErr.message });

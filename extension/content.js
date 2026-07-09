@@ -1197,6 +1197,12 @@
 
       var convCtx = getConversationContext();
 
+      var keepAliveInterval = setInterval(function () {
+        chrome.runtime.sendMessage({ type: 'KEEPALIVE' }, function () {
+          if (chrome.runtime.lastError) {}
+        });
+      }, 10000);
+
       chrome.runtime.sendMessage({
         type: 'GET_ENHANCEMENT',
         prompt: prompt + (contextAnnotation || ''),
@@ -1208,6 +1214,7 @@
         action: action,
         skipInterview: !!skipInterview,
       }, function (resp) {
+        clearInterval(keepAliveInterval);
         _busy = false;
         _updateWidgetState('idle');
 
