@@ -18,6 +18,14 @@ export const ImprovementSchema = z.object({
 });
 export type Improvement = z.infer<typeof ImprovementSchema>;
 
+export const InterviewQuestionSchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  options: z.array(z.string()),
+  category: z.string().optional(),
+});
+export type InterviewQuestion = z.infer<typeof InterviewQuestionSchema>;
+
 // ─── Enhancement Result ───────────────────────────────────────────────────────
 export const EnhancementResultSchema = z.object({
   qualityScore: z.number().min(0).max(100),
@@ -31,6 +39,8 @@ export const EnhancementResultSchema = z.object({
   enhancedPrompt: z.string(),
   explanation: z.string(),
   targetModel: z.string().optional(),
+  interviewQuestions: z.array(InterviewQuestionSchema).optional(),
+  whyBetter: z.array(z.string()).optional(),
 });
 export type EnhancementResult = z.infer<typeof EnhancementResultSchema>;
 

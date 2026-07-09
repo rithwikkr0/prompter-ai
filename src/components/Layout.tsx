@@ -171,7 +171,7 @@ export function Layout() {
       </AnimatePresence>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden relative z-10">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden relative z-10">
         {/* Mobile header */}
         <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: 'var(--border)', background: 'var(--bg-sidebar)', backdropFilter: 'blur(20px)' }}>
           <button className="btn-icon" onClick={() => setMobileOpen(true)}>

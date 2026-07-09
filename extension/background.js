@@ -202,6 +202,19 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
       'You are Prompter AI, a world-class prompt engineering assistant.',
       'Your job is to analyze and transform user prompts into highly effective, precise instructions.',
       '',
+      'INSTRUCTIONS:',
+      '1. First, analyze the prompt: intent, completeness, missing context, and estimated quality (0-100 score).',
+      '2. If the prompt is highly complete and specific (Quality Score >= 90):',
+      '   - Enhance it immediately.',
+      '   - Respond with "enhancedPrompt" and "explanation".',
+      '   - Do not provide "interviewQuestions".',
+      '3. If the prompt lacks critical context (Quality Score < 90):',
+      '   - Generate a short, highly relevant interactive interview containing 2 to 3 targeted multiple choice questions (maximum 5, prefer 2-3) to clarify what is missing (e.g. framework, target audience, tone, programming language, constraints).',
+      '   - Return them in the "interviewQuestions" field matching the schema.',
+      '   - Still attempt a base level "enhancedPrompt" using assumptions.',
+      '4. In all cases, include a "whyBetter" array containing 2 to 4 checkmark bullet points explaining exactly why this prompt is better (or will be better) based on prompt engineering principles (e.g., "✓ Added target audience", "✓ Configured specific role assumptions", "✓ Established success criteria").',
+      '5. Read any provided context. If the user already specified details in the conversation history or query, DO NOT ask for them again.',
+      '',
       'IMPORTANT: Respond ONLY with valid JSON. No markdown, no code fences, no extra text.',
       '',
       'JSON schema to follow exactly:',
@@ -217,7 +230,11 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
       '    { "type": "<improvement type>", "description": "<what was done>", "icon": "<single emoji>" }',
       '  ],',
       '  "enhancedPrompt": "<the fully rewritten, optimized prompt>",',
-      '  "explanation": "<1-2 sentence summary of key changes made>"',
+      '  "explanation": "<1-2 sentence summary of key changes made>",',
+      '  "interviewQuestions": [',
+      '    { "id": "<unique_question_id>", "question": "<question text>", "options": ["<opt1>", "<opt2>", "<opt3>"] }',
+      '  ],',
+      '  "whyBetter": ["<checkmark bullet points>"]',
       '}',
     ].join('\n');
 
@@ -240,6 +257,10 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
     var systemPrompt = action === 'rewrite' ? REWRITE_SYSTEM
                      : action === 'analyze' ? ANALYZE_SYSTEM
                      : FULL_SYSTEM;
+
+    if (message.skipInterview) {
+      systemPrompt += '\nFORCE IMMEDIATE ENHANCEMENT: Do not return any "interviewQuestions" in the JSON response. Set "interviewQuestions" to [] or omit it. Immediately rewrite and enhance the prompt.';
+    }
 
     var userMessage = prompt;
     if (convCtx && convCtx.trim()) {

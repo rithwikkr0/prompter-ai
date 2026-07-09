@@ -428,17 +428,35 @@
           '<div style="font-size:11px;color:rgba(255,255,255,0.3)">Reading conversation context…</div>' +
         '</div>' +
 
-        // Smart Interview questionnaire state
+        // Smart Interview questionnaire state (Step-by-step Wizard)
         '<div id="pf-interview" style="display:none" class="pf-fade-in">' +
-          '<div style="font-size:12px;font-weight:700;color:#f1f5f9;margin-bottom:4px">Smart Prompt Interview</div>' +
-          '<div style="font-size:10.5px;color:rgba(255,255,255,0.4);line-height:1.4;margin-bottom:12px">' +
-            'Providing a few more requirements will significantly improve your AI results.' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+            '<span style="font-size:12px;font-weight:700;color:#f1f5f9">Smart Prompt Interview</span>' +
+            '<span id="pf-wizard-progress" style="font-size:10px;color:rgba(255,255,255,0.4)">Question 1 of 3</span>' +
           '</div>' +
-          '<div id="pf-interview-questions" style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px"></div>' +
-          '<div style="display:flex;flex-direction:column;gap:6px">' +
-            '<button class="pf-btn pf-btn-primary" id="pf-interview-submit" style="width:100%">✨ Enhance with Context</button>' +
-            '<button class="pf-btn pf-btn-ghost" id="pf-interview-skip" style="width:100%">Skip & Enhance Directly</button>' +
+          
+          // Progress bar
+          '<div style="width:100%;height:3px;background:rgba(255,255,255,0.05);border-radius:2px;margin-bottom:12px;overflow:hidden">' +
+            '<div id="pf-wizard-progress-bar" style="width:33%;height:100%;background:linear-gradient(90deg,#4285F4,#9333EA);transition:width 0.3s ease"></div>' +
           '</div>' +
+          
+          // Active Question Card
+          '<div id="pf-interview-question-card" style="margin-bottom:12px"></div>' +
+          
+          // AI Prompt Builder (Evolving Live)
+          '<div class="pf-card" style="margin-bottom:12px;padding:9px;background:rgba(66,133,244,0.02);border-color:rgba(66,133,244,0.12)">' +
+            '<div class="pf-label" style="margin-bottom:4px;font-size:8.5px">AI Prompt Builder (Evolving Live)</div>' +
+            '<div style="font-size:9.5px;color:rgba(255,255,255,0.4);margin-bottom:2px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap">Original: <span id="pf-builder-original" style="font-style:italic"></span></div>' +
+            '<div style="font-size:9.5px;color:#93c5fd;margin-bottom:4px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap">Answers: <span id="pf-builder-answers">None</span></div>' +
+            '<div style="font-size:9.5px;color:rgba(255,255,255,0.3);margin-bottom:2px">Evolving Prompt Draft:</div>' +
+            '<textarea id="pf-builder-draft" readonly style="width:100%;min-height:54px;max-height:80px;font-size:10px;font-family:monospace;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.05);border-radius:6px;color:rgba(255,255,255,0.65);padding:4px 6px;resize:none;outline:none"></textarea>' +
+          '</div>' +
+          
+          '<div style="display:flex;gap:6px">' +
+            '<button class="pf-btn pf-btn-secondary" id="pf-wizard-prev" style="flex:1;font-size:11px;padding:7px 10px">Back</button>' +
+            '<button class="pf-btn pf-btn-primary" id="pf-interview-submit" style="flex:2;font-size:11px;padding:7px 10px">✨ Enhance with Context</button>' +
+          '</div>' +
+          '<button class="pf-btn pf-btn-ghost" id="pf-interview-skip" style="width:100%;margin-top:6px;font-size:10.5px;padding:5px 8px">Skip & Enhance Directly</button>' +
         '</div>' +
 
         // Result state
@@ -466,6 +484,12 @@
               '▸ Improvements Applied — <span id="pf-impr-count">0</span>' +
             '</div>' +
             '<div id="pf-impr-list" style="display:none;margin-top:6px"></div>' +
+          '</div>' +
+
+          // Learning Mode: Why this prompt became better
+          '<div id="pf-why-better-card" class="pf-card" style="display:none;background:rgba(52,168,83,0.02);border-color:rgba(52,168,83,0.12)">' +
+            '<div class="pf-label" style="color:#86efac;margin-bottom:6px">Why this prompt became better</div>' +
+            '<div id="pf-why-better-list" style="font-size:11px;color:rgba(255,255,255,0.55);line-height:1.5;display:flex;flex-direction:column;gap:4px"></div>' +
           '</div>' +
 
           // Enhanced prompt
@@ -613,6 +637,22 @@
       }
     } else if (imprCard) {
       imprCard.style.display = 'none';
+    }
+
+    var whyBetterCard = document.getElementById('pf-why-better-card');
+    var whyBetterList = document.getElementById('pf-why-better-list');
+    if (whyBetterCard && whyBetterList) {
+      if (result.whyBetter && result.whyBetter.length) {
+        whyBetterCard.style.display = 'block';
+        whyBetterList.innerHTML = result.whyBetter.map(function (item) {
+          return '<div style="display:flex;gap:6px;align-items:start">' +
+            '<span style="color:#4ade80;font-weight:bold">✓</span>' +
+            '<span>' + _esc(item.replace(/^[✓✓]\s*/, '')) + '</span>' +
+            '</div>';
+        }).join('');
+      } else {
+        whyBetterCard.style.display = 'none';
+      }
     }
 
     if (_enhTA) {
@@ -797,103 +837,299 @@
     ]
   };
 
-  // ─── Smart Interview State & Rendering ──────────────────────────────────────
+  // ─── Smart Interview State & Rendering (Claude-Style Wizard) ─────────────────
   var _selectedAnswers = {};
+  var _rememberChoices = {};
+  var _useDefaults = {};
 
-  function _showInterview(category, prompt, action) {
+  function _showInterview(questions, prompt, action, category) {
     if (!_panel) _createPanel();
     _setView('interview');
     _openPanel();
 
-    var questions = INTERVIEW_QUESTIONS[category] || INTERVIEW_QUESTIONS.general;
-    var container = document.getElementById('pf-interview-questions');
-    if (!container) return;
-
-    container.innerHTML = '';
-    _selectedAnswers = {};
-
-    chrome.runtime.sendMessage({ type: 'GET_INTERVIEW_PREFS' }, function (res) {
-      var savedPrefs = (res && res.prefs && res.prefs[category]) || {};
-      
-      questions.forEach(function (q) {
-        var card = document.createElement('div');
-        card.className = 'pf-card';
-        card.style.padding = '10px';
-        card.style.marginBottom = '6px';
-        
-        var qTitle = document.createElement('div');
-        qTitle.className = 'pf-label';
-        qTitle.style.marginBottom = '6px';
-        qTitle.textContent = q.q;
-        card.appendChild(qTitle);
-
-        var pillsContainer = document.createElement('div');
-        pillsContainer.style.display = 'flex';
-        pillsContainer.style.flexWrap = 'wrap';
-        pillsContainer.style.gap = '5px';
-
-        var selectedOpt = savedPrefs[q.id] || '';
-        _selectedAnswers[q.id] = selectedOpt;
-
-        q.opts.forEach(function (opt) {
-          var pill = document.createElement('span');
-          pill.textContent = opt;
-          pill.style.fontSize = '10px';
-          pill.style.padding = '4px 8px';
-          pill.style.borderRadius = '10px';
-          pill.style.border = '1px solid rgba(255,255,255,0.08)';
-          pill.style.cursor = 'pointer';
-          pill.style.transition = 'all 0.15s';
-          
-          function updatePillStyle() {
-            var active = _selectedAnswers[q.id] === opt;
-            pill.style.background = active ? 'rgba(66, 133, 244, 0.15)' : 'rgba(255,255,255,0.02)';
-            pill.style.color = active ? '#93c5fd' : 'rgba(255,255,255,0.6)';
-            pill.style.borderColor = active ? 'rgba(66, 133, 244, 0.4)' : 'rgba(255,255,255,0.08)';
-          }
-
-          updatePillStyle();
-
-          pill.addEventListener('click', function () {
-            _selectedAnswers[q.id] = opt;
-            Array.from(pillsContainer.children).forEach(function (sib) {
-              var siblingActive = sib.textContent === opt;
-              sib.style.background = siblingActive ? 'rgba(66, 133, 244, 0.15)' : 'rgba(255,255,255,0.02)';
-              sib.style.color = siblingActive ? '#93c5fd' : 'rgba(255,255,255,0.6)';
-              sib.style.borderColor = siblingActive ? 'rgba(66, 133, 244, 0.4)' : 'rgba(255,255,255,0.08)';
-            });
-          });
-
-          pillsContainer.appendChild(pill);
-        });
-
-        card.appendChild(pillsContainer);
-        container.appendChild(card);
-      });
-    });
-
+    var progressText = document.getElementById('pf-wizard-progress');
+    var progressBar = document.getElementById('pf-wizard-progress-bar');
+    var questionCard = document.getElementById('pf-interview-question-card');
+    
+    var builderOriginal = document.getElementById('pf-builder-original');
+    var builderAnswers = document.getElementById('pf-builder-answers');
+    var builderDraft = document.getElementById('pf-builder-draft');
+    
+    var prevBtn = document.getElementById('pf-wizard-prev');
     var submitBtn = document.getElementById('pf-interview-submit');
     var skipBtn = document.getElementById('pf-interview-skip');
 
-    var newSubmit = submitBtn.cloneNode(true);
-    submitBtn.parentNode.replaceChild(newSubmit, submitBtn);
-    
-    var newSkip = skipBtn.cloneNode(true);
-    skipBtn.parentNode.replaceChild(newSkip, skipBtn);
+    var currentStepIndex = 0;
+    _selectedAnswers = {};
+    _rememberChoices = {};
+    _useDefaults = {};
 
-    newSubmit.addEventListener('click', function () {
-      chrome.runtime.sendMessage({
-        type: 'SAVE_INTERVIEW_PREFS',
-        category: category,
-        answers: _selectedAnswers
+    if (builderOriginal) {
+      builderOriginal.textContent = prompt.length > 45 ? prompt.slice(0, 45) + '...' : prompt;
+    }
+
+    function updatePromptBuilder() {
+      var ansParts = [];
+      Object.keys(_selectedAnswers).forEach(function (k) {
+        if (_selectedAnswers[k] && _selectedAnswers[k] !== 'Skipped') {
+          ansParts.push(k + ': ' + _selectedAnswers[k]);
+        }
+      });
+      if (builderAnswers) {
+        builderAnswers.textContent = ansParts.length > 0 ? ansParts.join(', ') : 'None';
+      }
+      
+      var draft = prompt;
+      var contextLines = [];
+      Object.keys(_selectedAnswers).forEach(function (k) {
+        if (_selectedAnswers[k] && _selectedAnswers[k] !== 'Skipped') {
+          contextLines.push('- ' + k + ': ' + _selectedAnswers[k]);
+        }
+      });
+      if (contextLines.length > 0) {
+        draft += '\n\n=== ADDITIONAL USER PREFERENCES ===\n' + contextLines.join('\n');
+      }
+      if (builderDraft) {
+        builderDraft.value = draft;
+      }
+    }
+
+    // Load saved preferences to prepopulate or auto-apply
+    chrome.runtime.sendMessage({ type: 'GET_INTERVIEW_PREFS' }, function (res) {
+      var savedPrefs = (res && res.prefs && res.prefs[category]) || {};
+      
+      // Pre-fill answers with saved preferences
+      questions.forEach(function (q) {
+        if (savedPrefs[q.id]) {
+          _selectedAnswers[q.id] = savedPrefs[q.id];
+          _rememberChoices[q.id] = true; // Auto-enable check since it came from memory
+        }
+      });
+      
+      updatePromptBuilder();
+      
+      // Auto-bypass questions that have defaults saved if they are already answered
+      var firstUnanswered = 0;
+      for (var i = 0; i < questions.length; i++) {
+        if (!_selectedAnswers[questions[i].id]) {
+          firstUnanswered = i;
+          break;
+        }
+      }
+      
+      // If all questions are pre-answered, start at step 0 anyway to review, or last step. Let's start at first unanswered or 0.
+      renderStep(firstUnanswered < questions.length ? firstUnanswered : 0);
+    });
+
+    function renderStep(stepIndex) {
+      currentStepIndex = stepIndex;
+      var totalSteps = questions.length;
+      
+      if (progressText) {
+        progressText.textContent = 'Question ' + (stepIndex + 1) + ' of ' + totalSteps;
+      }
+      if (progressBar) {
+        progressBar.style.width = ((stepIndex + 1) / totalSteps * 100) + '%';
+      }
+      if (prevBtn) {
+        prevBtn.style.display = stepIndex === 0 ? 'none' : 'block';
+      }
+
+      var q = questions[stepIndex];
+      questionCard.innerHTML = '';
+
+      var cardInner = document.createElement('div');
+      cardInner.className = 'pf-card';
+      cardInner.style.padding = '10px';
+      cardInner.style.marginBottom = '6px';
+
+      var qTitle = document.createElement('div');
+      qTitle.className = 'pf-label';
+      qTitle.style.marginBottom = '6px';
+      qTitle.textContent = q.question;
+      cardInner.appendChild(qTitle);
+
+      var pillsContainer = document.createElement('div');
+      pillsContainer.style.display = 'flex';
+      pillsContainer.style.flexWrap = 'wrap';
+      pillsContainer.style.gap = '5px';
+      pillsContainer.style.marginBottom = '8px';
+
+      var otherContainer = document.createElement('div');
+      otherContainer.style.marginTop = '6px';
+      otherContainer.style.display = 'none';
+
+      var otherInput = document.createElement('input');
+      otherInput.type = 'text';
+      otherInput.placeholder = 'Type custom value...';
+      otherInput.style.cssText = 'padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.25);color:#fff;font-size:11px;width:100%;outline:none';
+      otherContainer.appendChild(otherInput);
+
+      var selectedVal = _selectedAnswers[q.id] || '';
+
+      // Render standard option pills
+      q.options.forEach(function (opt) {
+        var pill = document.createElement('span');
+        pill.textContent = opt;
+        pill.style.cssText = 'font-size:10.5px;padding:5px 9px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);cursor:pointer;transition:all 0.15s;background:rgba(255,255,255,0.02);color:rgba(255,255,255,0.6)';
+
+        if (selectedVal === opt) {
+          pill.style.background = 'rgba(66, 133, 244, 0.15)';
+          pill.style.color = '#93c5fd';
+          pill.style.borderColor = 'rgba(66, 133, 244, 0.4)';
+        }
+
+        pill.addEventListener('click', function () {
+          _selectedAnswers[q.id] = opt;
+          otherContainer.style.display = 'none';
+          updatePillSelection(opt);
+          updatePromptBuilder();
+          savePrefsIfChecked(q.id, opt);
+          
+          // Auto-advance if not the last question
+          if (stepIndex < totalSteps - 1) {
+            setTimeout(function () {
+              renderStep(stepIndex + 1);
+            }, 250);
+          }
+        });
+
+        pillsContainer.appendChild(pill);
       });
 
+      // Render "Other..." pill
+      var otherPill = document.createElement('span');
+      otherPill.textContent = 'Other...';
+      otherPill.style.cssText = 'font-size:10.5px;padding:5px 9px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);cursor:pointer;transition:all 0.15s;background:rgba(255,255,255,0.02);color:rgba(255,255,255,0.6)';
+      
+      var isCustomValue = selectedVal && !q.options.includes(selectedVal) && selectedVal !== 'Skipped';
+      if (isCustomValue) {
+        otherPill.style.background = 'rgba(66, 133, 244, 0.15)';
+        otherPill.style.color = '#93c5fd';
+        otherPill.style.borderColor = 'rgba(66, 133, 244, 0.4)';
+        otherContainer.style.display = 'block';
+        otherInput.value = selectedVal;
+      }
+
+      otherPill.addEventListener('click', function () {
+        updatePillSelection('Other...');
+        otherContainer.style.display = 'block';
+        otherInput.focus();
+      });
+      pillsContainer.appendChild(otherPill);
+
+      // Render "Skip" pill
+      var skipPill = document.createElement('span');
+      skipPill.textContent = 'Skip';
+      skipPill.style.cssText = 'font-size:10.5px;padding:5px 9px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);cursor:pointer;transition:all 0.15s;background:rgba(255,255,255,0.02);color:rgba(255,255,255,0.6)';
+      
+      if (selectedVal === 'Skipped') {
+        skipPill.style.background = 'rgba(255,255,255,0.08)';
+        skipPill.style.color = 'rgba(255,255,255,0.85)';
+      }
+
+      skipPill.addEventListener('click', function () {
+        _selectedAnswers[q.id] = 'Skipped';
+        otherContainer.style.display = 'none';
+        updatePillSelection('Skip');
+        updatePromptBuilder();
+        
+        // Auto-advance
+        if (stepIndex < totalSteps - 1) {
+          setTimeout(function () {
+            renderStep(stepIndex + 1);
+          }, 250);
+        }
+      });
+      pillsContainer.appendChild(skipPill);
+
+      otherInput.addEventListener('input', function () {
+        _selectedAnswers[q.id] = otherInput.value;
+        updatePromptBuilder();
+        savePrefsIfChecked(q.id, otherInput.value);
+      });
+
+      cardInner.appendChild(pillsContainer);
+      cardInner.appendChild(otherContainer);
+
+      // Memory settings (Remember choice & Use as default)
+      var memoryContainer = document.createElement('div');
+      memoryContainer.style.cssText = 'display:flex;gap:12px;align-items:center;margin-top:10px;border-top:1px solid rgba(255,255,255,0.05);padding-top:8px';
+
+      var rememberLabel = document.createElement('label');
+      rememberLabel.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;font-size:10px;color:rgba(255,255,255,0.45)';
+      var rememberCb = document.createElement('input');
+      rememberCb.type = 'checkbox';
+      rememberCb.style.cssText = 'width:11px;height:11px;margin:0';
+      rememberCb.checked = !!_rememberChoices[q.id];
+      rememberCb.addEventListener('change', function () {
+        _rememberChoices[q.id] = rememberCb.checked;
+        if (rememberCb.checked && _selectedAnswers[q.id]) {
+          savePrefsIfChecked(q.id, _selectedAnswers[q.id]);
+        }
+      });
+      rememberLabel.appendChild(rememberCb);
+      rememberLabel.appendChild(document.createTextNode('Remember choice'));
+
+      var defaultLabel = document.createElement('label');
+      defaultLabel.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;font-size:10px;color:rgba(255,255,255,0.45)';
+      var defaultCb = document.createElement('input');
+      defaultCb.type = 'checkbox';
+      defaultCb.style.cssText = 'width:11px;height:11px;margin:0';
+      defaultCb.checked = !!_useDefaults[q.id];
+      defaultCb.addEventListener('change', function () {
+        _useDefaults[q.id] = defaultCb.checked;
+        if (defaultCb.checked && _selectedAnswers[q.id]) {
+          savePrefsIfChecked(q.id, _selectedAnswers[q.id]);
+        }
+      });
+      defaultLabel.appendChild(defaultCb);
+      defaultLabel.appendChild(document.createTextNode('Use as default'));
+
+      memoryContainer.appendChild(rememberLabel);
+      memoryContainer.appendChild(defaultLabel);
+      cardInner.appendChild(memoryContainer);
+
+      questionCard.appendChild(cardInner);
+
+      function updatePillSelection(targetPillText) {
+        Array.from(pillsContainer.children).forEach(function (sib) {
+          var active = sib.textContent === targetPillText;
+          sib.style.background = active ? 'rgba(66, 133, 244, 0.15)' : 'rgba(255,255,255,0.02)';
+          sib.style.color = active ? '#93c5fd' : 'rgba(255,255,255,0.6)';
+          sib.style.borderColor = active ? 'rgba(66, 133, 244, 0.4)' : 'rgba(255,255,255,0.08)';
+        });
+      }
+
+      function savePrefsIfChecked(qid, val) {
+        if (_rememberChoices[qid] || _useDefaults[qid]) {
+          chrome.runtime.sendMessage({
+            type: 'SAVE_INTERVIEW_PREFS',
+            category: category,
+            answers: { [qid]: val }
+          });
+        }
+      }
+    }
+
+    // Wire navigation actions
+    var newPrev = prevBtn.cloneNode(true);
+    prevBtn.parentNode.replaceChild(newPrev, prevBtn);
+    prevBtn = newPrev;
+    prevBtn.addEventListener('click', function () {
+      if (currentStepIndex > 0) {
+        renderStep(currentStepIndex - 1);
+      }
+    });
+
+    var newSubmit = submitBtn.cloneNode(true);
+    submitBtn.parentNode.replaceChild(newSubmit, submitBtn);
+    submitBtn = newSubmit;
+    submitBtn.addEventListener('click', function () {
       var contextParts = [];
       Object.keys(_selectedAnswers).forEach(function (key) {
-        if (_selectedAnswers[key]) {
-          var qObj = questions.find(function(x) { return x.id === key; });
-          var qLabel = qObj ? qObj.q : key;
-          contextParts.push(qLabel + ': ' + _selectedAnswers[key]);
+        if (_selectedAnswers[key] && _selectedAnswers[key] !== 'Skipped') {
+          contextParts.push(key + ': ' + _selectedAnswers[key]);
         }
       });
       var contextAnnotation = '';
@@ -901,11 +1137,14 @@
         contextAnnotation = '\n\n=== ADDITIONAL USER PREFERENCES ===\n- ' + contextParts.join('\n- ');
       }
 
-      _doEnhance(prompt, action, contextAnnotation, true);
+      _doEnhance(prompt, action, contextAnnotation, true, true);
     });
 
-    newSkip.addEventListener('click', function () {
-      _doEnhance(prompt, action, '', false);
+    var newSkip = skipBtn.cloneNode(true);
+    skipBtn.parentNode.replaceChild(newSkip, skipBtn);
+    skipBtn = newSkip;
+    skipBtn.addEventListener('click', function () {
+      _doEnhance(prompt, action, '', false, true);
     });
   }
 
@@ -923,31 +1162,10 @@
       return;
     }
 
-    _updateWidgetState('loading');
-    _showLoading('Scoring prompt quality...');
-
-    chrome.runtime.sendMessage({
-      type: 'SCORE_PROMPT',
-      prompt: prompt
-    }, function (scoreResp) {
-      _updateWidgetState('idle');
-      if (chrome.runtime.lastError || !scoreResp) {
-        _doEnhance(prompt, action, '', false);
-        return;
-      }
-
-      var score = scoreResp.score || 0;
-      var category = scoreResp.category || 'general';
-
-      if (score >= 75) {
-        _doEnhance(prompt, action, '', false);
-      } else {
-        _showInterview(category, prompt, action);
-      }
-    });
+    _doEnhance(prompt, action, '', false, false);
   }
 
-  function _doEnhance(prompt, action, contextAnnotation, interviewUsed) {
+  function _doEnhance(prompt, action, contextAnnotation, interviewUsed, skipInterview) {
     chrome.storage.local.get(['prompter_settings', 'promptforge_settings'], function (stored) {
       var cfg = stored.prompter_settings || stored.promptforge_settings || {};
       var provider = cfg.provider || 'gemini';
@@ -988,6 +1206,7 @@
         fullAnalysis: true,
         conversationContext: convCtx,
         action: action,
+        skipInterview: !!skipInterview,
       }, function (resp) {
         _busy = false;
         _updateWidgetState('idle');
@@ -1003,6 +1222,12 @@
         }
         if (!resp) { _showError('Background service unavailable. Try reloading the page.'); return; }
         if (!resp.success) { _showError(resp.error || 'Enhancement failed. Please check your API key in Settings.'); return; }
+
+        // If the model recommends dynamic interview questions and we are not skipping them, transition to the interview wizard!
+        if (!skipInterview && resp.result && resp.result.interviewQuestions && resp.result.interviewQuestions.length > 0) {
+          _showInterview(resp.result.interviewQuestions, prompt, action, resp.result.intent.category || 'general');
+          return;
+        }
 
         S.lastOriginal = prompt;
         S.lastResult = resp.result || {

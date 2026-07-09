@@ -21,7 +21,7 @@ const STACK = [
 
 export function AboutPage() {
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="w-full max-w-2xl mx-auto space-y-8">
       {/* Hero */}
       <motion.div
         initial={{ opacity: 0, y: -12 }}
