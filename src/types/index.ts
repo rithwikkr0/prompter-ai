@@ -18,17 +18,29 @@ export const ImprovementSchema = z.object({
 });
 export type Improvement = z.infer<typeof ImprovementSchema>;
 
+// ─── Score Breakdown ──────────────────────────────────────────────────────────
+export const ScoreBreakdownSchema = z.object({
+  clarity: z.number().min(0).max(100).default(80),
+  context: z.number().min(0).max(100).default(70),
+  constraints: z.number().min(0).max(100).default(75),
+  examples: z.number().min(0).max(100).default(60),
+  outputFormat: z.number().min(0).max(100).default(85),
+});
+export type ScoreBreakdown = z.infer<typeof ScoreBreakdownSchema>;
+
 export const InterviewQuestionSchema = z.object({
   id: z.string(),
   question: z.string(),
   options: z.array(z.string()),
   category: z.string().optional(),
+  aiRecommended: z.string().optional(),
 });
 export type InterviewQuestion = z.infer<typeof InterviewQuestionSchema>;
 
 // ─── Enhancement Result ───────────────────────────────────────────────────────
 export const EnhancementResultSchema = z.object({
   qualityScore: z.number().min(0).max(100),
+  scoreBreakdown: ScoreBreakdownSchema.optional(),
   intent: z.object({
     category: z.string(),
     confidence: z.number().min(0).max(100),
@@ -41,8 +53,44 @@ export const EnhancementResultSchema = z.object({
   targetModel: z.string().optional(),
   interviewQuestions: z.array(InterviewQuestionSchema).optional(),
   whyBetter: z.array(z.string()).optional(),
+  aiProfileUsed: z.string().optional(),
 });
 export type EnhancementResult = z.infer<typeof EnhancementResultSchema>;
+
+// ─── AI Memory ────────────────────────────────────────────────────────────────
+export const UserMemorySchema = z.object({
+  preferredProvider: z.string().default('gemini'),
+  preferredModel: z.string().default('gemini-2.5-flash'),
+  preferredLanguage: z.string().default('English'),
+  preferredFramework: z.string().default('React / TypeScript'),
+  preferredLength: z.string().default('Medium (300-800 words)'),
+  preferredFormat: z.string().default('Markdown'),
+  preferredStyle: z.string().default('Professional & Structured'),
+  preferredTone: z.string().default('Technical & Precise'),
+  favoriteCategories: z.array(z.string()).default(['coding', 'research']),
+  customRules: z.array(z.string()).default([
+    'Always include clear code comments',
+    'Prefer modular, reusable design patterns',
+  ]),
+});
+export type UserMemory = z.infer<typeof UserMemorySchema>;
+
+// ─── AI Profile ───────────────────────────────────────────────────────────────
+export type AIProfile = 'gemini' | 'claude' | 'chatgpt' | 'deepseek' | 'grok' | 'custom';
+
+// ─── Context Mode ─────────────────────────────────────────────────────────────
+export type ContextMode = 'prompt_only' | 'current_chat' | 'full_conversation' | 'manual';
+
+// ─── Benchmark Result ─────────────────────────────────────────────────────────
+export const BenchmarkResultSchema = z.object({
+  originalPrompt: z.string(),
+  geminiPrompt: z.string(),
+  claudePrompt: z.string(),
+  chatgptPrompt: z.string(),
+  recommendation: z.string(),
+  strengths: z.record(z.string(), z.string()),
+});
+export type BenchmarkResult = z.infer<typeof BenchmarkResultSchema>;
 
 // ─── Prompt History Entry ─────────────────────────────────────────────────────
 export const HistoryEntrySchema = z.object({
@@ -78,6 +126,10 @@ export const UserSettingsSchema = z.object({
   language: z.string().default('en'),
   keyboardShortcut: z.string().default('Ctrl+Shift+E'),
   provider: z.string().default('gemini'),
+  targetProfile: z.string().default('gemini'),
+  developerMode: z.boolean().default(false),
+  safetyChecksEnabled: z.boolean().default(true),
+  contextMode: z.string().default('full_conversation'),
   providerKeys: z.record(z.string(), z.string()).default({
     gemini: '',
     openrouter: '',
@@ -92,10 +144,8 @@ export const UserSettingsSchema = z.object({
     openai: 'gpt-4o-mini',
     anthropic: 'claude-3-5-haiku-20241022',
   }),
-
 });
 export type UserSettings = z.infer<typeof UserSettingsSchema>;
-
 
 // ─── App State ────────────────────────────────────────────────────────────────
 export type EnhancementStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -139,7 +189,7 @@ export const CATEGORY_META: Record<string, CategoryMeta> = {
   general: { id: 'general', label: 'General', icon: '⚡', color: '#6B7280' },
 };
 
-// ─── v2.0 Types ──────────────────────────────────────────────────────────
+// ─── v2.1 Types ──────────────────────────────────────────────────────────
 export const AnalyticsEntrySchema = z.object({
   id: z.string(),
   date: z.string(),

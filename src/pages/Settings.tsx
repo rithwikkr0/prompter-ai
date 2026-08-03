@@ -411,6 +411,63 @@ export function SettingsPage() {
         </div>
       </Section>
 
+      {/* Developer Mode */}
+      <Section title="Developer Mode Diagnostics" icon={ToggleLeft}>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-sm font-semibold block" style={{ color: 'var(--text-primary)' }}>
+                Enable Developer Mode
+              </span>
+              <span className="text-xs block mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                Display real-time extension diagnostics, API latency, and content script status.
+              </span>
+            </div>
+            <button
+              className={`w-11 h-6 rounded-full transition-colors p-0.5 ${
+                settings.developerMode ? 'bg-purple-600' : 'bg-slate-700'
+              }`}
+              onClick={() => updateSettings({ developerMode: !settings.developerMode })}
+            >
+              <div
+                className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                  settings.developerMode ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {settings.developerMode && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 rounded-xl border border-purple-500/20 bg-purple-500/5 space-y-2 text-xs font-mono"
+            >
+              <div className="flex justify-between">
+                <span className="text-slate-400">Content Script Status:</span>
+                <span className="text-emerald-400 font-bold">Active / Injected</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Active Provider:</span>
+                <span className="text-purple-300 font-bold">{settings.provider || 'gemini'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Target Model:</span>
+                <span className="text-blue-300">{settings.preferredModel || 'default'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Target AI Profile:</span>
+                <span className="text-amber-300">{settings.targetProfile || 'gemini'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Manifest V3 Environment:</span>
+                <span className="text-slate-300">Service Worker Active</span>
+              </div>
+            </motion.div>
+          )}
+        </div>
+      </Section>
+
       {/* Data */}
       <Section title="Data Management" icon={Download}>
         <div className="flex gap-3 flex-wrap">

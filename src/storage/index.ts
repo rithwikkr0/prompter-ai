@@ -1,4 +1,4 @@
-import type { UserSettings, HistoryEntry, Template, AnalyticsEntry, InterviewPreferences, WidgetPosition } from '../types';
+import type { UserSettings, HistoryEntry, Template, AnalyticsEntry, InterviewPreferences, WidgetPosition, UserMemory } from '../types';
 
 // ─── Chrome type shim (works in both extension and PWA contexts) ──────────────
 declare const chrome: {
@@ -87,6 +87,10 @@ const DEFAULT_SETTINGS: UserSettings = {
   language: 'en',
   keyboardShortcut: 'Ctrl+Shift+E',
   provider: 'gemini',
+  targetProfile: 'gemini',
+  developerMode: false,
+  safetyChecksEnabled: true,
+  contextMode: 'full_conversation',
   providerKeys: {
     gemini: '',
     openai: '',
@@ -186,4 +190,46 @@ export const storage = {
     positions[hostname] = pos;
     await set('prompter_widget_positions', positions);
   },
+
+  // AI Prompt Memory
+  getMemory: () => get<UserMemory>('prompter_user_memory', {
+    preferredProvider: 'gemini',
+    preferredModel: 'gemini-2.5-flash',
+    preferredLanguage: 'English',
+    preferredFramework: 'React / TypeScript',
+    preferredLength: 'Medium (300-800 words)',
+    preferredFormat: 'Markdown',
+    preferredStyle: 'Professional & Structured',
+    preferredTone: 'Technical & Precise',
+    favoriteCategories: ['coding', 'research'],
+    customRules: [
+      'Always include clear code comments',
+      'Prefer modular, reusable design patterns',
+    ],
+  }),
+  saveMemory: (memory: UserMemory) => set('prompter_user_memory', memory),
+  resetMemory: () => set('prompter_user_memory', {
+    preferredProvider: 'gemini',
+    preferredModel: 'gemini-2.5-flash',
+    preferredLanguage: 'English',
+    preferredFramework: 'React / TypeScript',
+    preferredLength: 'Medium (300-800 words)',
+    preferredFormat: 'Markdown',
+    preferredStyle: 'Professional & Structured',
+    preferredTone: 'Technical & Precise',
+    favoriteCategories: ['coding', 'research'],
+    customRules: [],
+  }),
+  async exportMemory(): Promise<string> {
+    const mem = await get<UserMemory>('prompter_user_memory', {} as UserMemory);
+    return JSON.stringify(mem, null, 2);
+  },
+  async importMemory(json: string): Promise<void> {
+    const parsed = JSON.parse(json) as UserMemory;
+    await set('prompter_user_memory', parsed);
+  },
+
+  // Last Active Route Persistence
+  getLastRoute: () => get<string>('prompter_last_route', '/'),
+  saveLastRoute: (route: string) => set('prompter_last_route', route),
 };

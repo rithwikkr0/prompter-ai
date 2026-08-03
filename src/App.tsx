@@ -13,12 +13,13 @@ import { FavoritesPage } from './pages/Favorites';
 import { AnalyticsPage } from './pages/Analytics';
 import { ShortcutsPage } from './pages/Shortcuts';
 import { HelpPage } from './pages/Help';
+import { MemoryPage } from './pages/Memory';
+import { BenchmarkPage } from './pages/Benchmark';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 1000 * 60 * 5 } },
 });
 
-// Loading spinner while storage hydrates
 function LoadingScreen() {
   return (
     <div
@@ -64,6 +65,8 @@ function AppRoutes() {
       {/* Main app — Layout uses Outlet so nested routes always render */}
       <Route element={needsOnboarding ? <Navigate to="/onboarding" replace /> : <Layout />}>
         <Route index element={<DashboardPage />} />
+        <Route path="/memory" element={<MemoryPage />} />
+        <Route path="/benchmark" element={<BenchmarkPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/favorites" element={<FavoritesPage />} />
         <Route path="/templates" element={<TemplatesPage />} />

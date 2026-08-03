@@ -3,13 +3,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles, History, LayoutTemplate, Settings, Info,
   Zap, Moon, Sun, Monitor, ChevronRight, Menu, X,
-  Star, BarChart3, Keyboard, HelpCircle
+  Star, BarChart3, Keyboard, HelpCircle, Brain, Columns, Search
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useSettings } from '../contexts';
+import { storage } from '../storage';
+import { SearchModal } from './SearchModal';
 
 const NAV = [
   { to: '/', icon: Sparkles, label: 'Dashboard', exact: true },
+  { to: '/memory', icon: Brain, label: 'AI Memory' },
+  { to: '/benchmark', icon: Columns, label: 'Benchmark' },
   { to: '/history', icon: History, label: 'History' },
   { to: '/favorites', icon: Star, label: 'Favorites' },
   { to: '/templates', icon: LayoutTemplate, label: 'Templates' },
@@ -51,8 +55,26 @@ function ThemeToggle() {
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const { settings } = useSettings();
   const location = useLocation();
+
+  // Save active route state for side panel restoration
+  useEffect(() => {
+    storage.saveLastRoute(location.pathname);
+  }, [location.pathname]);
+
+  // Global Hotkey Listener (Ctrl+K for Search, Ctrl+Shift+A for Analyze)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Apply theme
   useEffect(() => {
@@ -195,6 +217,9 @@ export function Layout() {
           </AnimatePresence>
         </main>
       </div>
+
+      {/* Global Command Palette */}
+      <SearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

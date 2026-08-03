@@ -123,6 +123,66 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
     return false;
   }
 
+  // ── Benchmark model prompt variations ──
+  if (message.type === 'BENCHMARK_PROMPTS') {
+    var bPrompt = message.prompt || '';
+    var bProvider = message.provider || 'gemini';
+    var bApiKey = message.apiKey || '';
+    var bModel = message.model || '';
+
+    if (!bPrompt || !bApiKey) {
+      sendResponse({ success: false, error: 'Prompt and API key are required.' });
+      return true;
+    }
+
+    var sysBench = [
+      'You are Prompter AI Benchmark Engine.',
+      'Generate 3 model-optimized prompt variations of the user input:',
+      '1. Google Gemini optimized version (emphasizing search groundings, markdown structure, and JSON output).',
+      '2. Anthropic Claude optimized version (using explicit XML tags <instructions>, <context>, <output_format>).',
+      '3. OpenAI ChatGPT optimized version (using markdown system headers, chain-of-thought rules, and step delimiters).',
+      '',
+      'Respond ONLY with valid JSON in this exact structure:',
+      '{',
+      '  "originalPrompt": "' + bPrompt.replace(/"/g, '\\"') + '",',
+      '  "geminiPrompt": "<Gemini optimized version>",',
+      '  "claudePrompt": "<Claude XML-tagged version>",',
+      '  "chatgptPrompt": "<ChatGPT markdown system/user version>",',
+      '  "recommendation": "<1 sentence recommendation on which model fits best>",',
+      '  "strengths": {',
+      '    "gemini": "<1 sentence key strength>",',
+      '    "claude": "<1 sentence key strength>",',
+      '    "chatgpt": "<1 sentence key strength>"',
+      '  }',
+      '}'
+    ].join('\n');
+
+    dispatchApiCall(bProvider, bApiKey, bModel, sysBench, bPrompt, function(err, text) {
+      if (err) {
+        sendResponse({ success: false, error: err });
+        return;
+      }
+      try {
+        var clean = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+        var parsed = JSON.parse(clean);
+        sendResponse({ success: true, result: parsed });
+      } catch(e) {
+        sendResponse({
+          success: true,
+          result: {
+            originalPrompt: bPrompt,
+            geminiPrompt: '**Gemini Target:**\n' + bPrompt,
+            claudePrompt: '<instructions>\n' + bPrompt + '\n</instructions>',
+            chatgptPrompt: '### Task Instructions\n' + bPrompt,
+            recommendation: 'Use Gemini for search groundings or Claude for strict XML formatting.',
+            strengths: { gemini: 'Real-time groundings', claude: 'Complex reasoning & XML tags', chatgpt: 'Direct task formatting' }
+          }
+        });
+      }
+    });
+    return true; // async
+  }
+
 
 
   // ── Increment enhancement badge ──
@@ -210,22 +270,18 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
       '',
       'INSTRUCTIONS:',
       '1. First, analyze the prompt: intent, completeness, missing context, and estimated quality (0-100 score).',
-      '2. If the prompt is highly complete and specific (Quality Score >= 90):',
-      '   - Enhance it immediately.',
-      '   - Respond with "enhancedPrompt" and "explanation".',
-      '   - Do not provide "interviewQuestions".',
-      '3. If the prompt lacks critical context (Quality Score < 90):',
-      '   - Generate a short, highly relevant interactive interview containing 2 to 3 targeted multiple choice questions (maximum 5, prefer 2-3) to clarify what is missing (e.g. framework, target audience, tone, programming language, constraints).',
-      '   - Return them in the "interviewQuestions" field matching the schema.',
-      '   - Still attempt a base level "enhancedPrompt" using assumptions.',
-      '4. In all cases, include a "whyBetter" array containing 2 to 4 checkmark bullet points explaining exactly why this prompt is better (or will be better) based on prompt engineering principles (e.g., "✓ Added target audience", "✓ Configured specific role assumptions", "✓ Established success criteria").',
-      '5. Read any provided context. If the user already specified details in the conversation history or query, DO NOT ask for them again.',
+      '2. Provide a 5-axis score breakdown object (0-100 each) for: clarity, context, constraints, examples, outputFormat.',
+      '3. If overall Quality Score >= 90: Enhance it immediately without asking questions.',
+      '4. If Quality Score < 90: Generate a short interactive interview containing 2 to 3 targeted multiple-choice questions (max 5) to clarify missing context. Add an "aiRecommended" field specifying the best option for each question based on context.',
+      '5. In all cases, include a "whyBetter" array with 2 to 4 checkmark bullet points explaining prompt engineering improvements made.',
+      '6. Read any provided context. If details are already present in the active conversation history or query, DO NOT ask for them again.',
       '',
       'IMPORTANT: Respond ONLY with valid JSON. No markdown, no code fences, no extra text.',
       '',
       'JSON schema to follow exactly:',
       '{',
       '  "qualityScore": <integer 0-100>,',
+      '  "scoreBreakdown": { "clarity": 90, "context": 70, "constraints": 80, "examples": 40, "outputFormat": 95 },',
       '  "intent": {',
       '    "category": "<one of: coding|debugging|ai-agents|image-generation|video-generation|academic-writing|resume|linkedin|email|marketing|seo|social-media|business|startup-pitch|research|translation|cybersecurity|mathematics|data-science|writing|general>",',
       '    "confidence": <integer 0-100>,',
@@ -238,7 +294,7 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
       '  "enhancedPrompt": "<the fully rewritten, optimized prompt>",',
       '  "explanation": "<1-2 sentence summary of key changes made>",',
       '  "interviewQuestions": [',
-      '    { "id": "<unique_question_id>", "question": "<question text>", "options": ["<opt1>", "<opt2>", "<opt3>"] }',
+      '    { "id": "<unique_question_id>", "question": "<question text>", "options": ["<opt1>", "<opt2>", "<opt3>"], "aiRecommended": "<opt1>" }',
       '  ],',
       '  "whyBetter": ["<checkmark bullet points>"]',
       '}',
@@ -247,22 +303,38 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
     var REWRITE_SYSTEM = [
       'You are Prompter AI. Completely rewrite the given prompt for maximum clarity and effectiveness.',
       'Respond ONLY with valid JSON matching this schema exactly:',
-      '{"qualityScore":75,"intent":{"category":"general","confidence":90,"label":"General"},',
+      '{"qualityScore":75,"scoreBreakdown":{"clarity":80,"context":70,"constraints":75,"examples":60,"outputFormat":85},',
+      '"intent":{"category":"general","confidence":90,"label":"General"},',
       '"missingContext":[],"improvements":[{"type":"Rewrite","description":"Rewritten for clarity","icon":"🔄"}],',
-      '"enhancedPrompt":"<full rewritten prompt>","explanation":"Rewritten for better execution"}',
+      '"enhancedPrompt":"<full rewritten prompt>","explanation":"Rewritten for better execution","whyBetter":["✓ Structured formatting","✓ Role assignment"]}',
     ].join('\n');
 
     var ANALYZE_SYSTEM = [
       'You are Prompter AI. Analyze the given prompt quality and provide structured feedback.',
       'Respond ONLY with valid JSON matching this schema exactly:',
-      '{"qualityScore":60,"intent":{"category":"general","confidence":90,"label":"General"},',
+      '{"qualityScore":60,"scoreBreakdown":{"clarity":65,"context":55,"constraints":60,"examples":40,"outputFormat":70},',
+      '"intent":{"category":"general","confidence":90,"label":"General"},',
       '"missingContext":["Target output format"],"improvements":[{"type":"Analysis","description":"Identified missing context","icon":"🔍"}],',
-      '"enhancedPrompt":"<improved prompt>","explanation":"Prompt analyzed and scored"}',
+      '"enhancedPrompt":"<improved prompt>","explanation":"Prompt analyzed and scored","whyBetter":["✓ Clarified goal"]}',
     ].join('\n');
 
     var systemPrompt = action === 'rewrite' ? REWRITE_SYSTEM
                      : action === 'analyze' ? ANALYZE_SYSTEM
                      : FULL_SYSTEM;
+
+    // Apply Target AI Profile Optimizations
+    var targetProfile = message.targetProfile || 'gemini';
+    if (targetProfile === 'gemini') {
+      systemPrompt += '\nPROFILE OPTIMIZATION (Google Gemini): Format output for Gemini models. Emphasize search groundings, markdown headers, and structured JSON constraints.';
+    } else if (targetProfile === 'claude') {
+      systemPrompt += '\nPROFILE OPTIMIZATION (Anthropic Claude): Format output for Claude models. Use XML tags (<instructions>, <context>, <output_format>) for prompt structure.';
+    } else if (targetProfile === 'chatgpt') {
+      systemPrompt += '\nPROFILE OPTIMIZATION (OpenAI ChatGPT): Format output for ChatGPT models. Use markdown system/user framing, explicit step-by-step chain-of-thought rules, and delimiters.';
+    } else if (targetProfile === 'deepseek') {
+      systemPrompt += '\nPROFILE OPTIMIZATION (DeepSeek R1/V3): Format output for DeepSeek models. Emphasize reasoning tags (<think>) and concise mathematical constraints.';
+    } else if (targetProfile === 'grok') {
+      systemPrompt += '\nPROFILE OPTIMIZATION (xAI Grok): Format output for Grok models. Emphasize real-time web search context, direct tone, and python code execution instructions.';
+    }
 
     if (message.skipInterview) {
       systemPrompt += '\nFORCE IMMEDIATE ENHANCEMENT: Do not return any "interviewQuestions" in the JSON response. Set "interviewQuestions" to [] or omit it. Immediately rewrite and enhance the prompt.';

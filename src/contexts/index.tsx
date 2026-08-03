@@ -17,6 +17,10 @@ const defaultSettings: UserSettings = {
   language: 'en',
   keyboardShortcut: 'Ctrl+Shift+E',
   provider: 'gemini',
+  targetProfile: 'gemini',
+  developerMode: false,
+  safetyChecksEnabled: true,
+  contextMode: 'full_conversation',
   providerKeys: {
     gemini: '',
     openrouter: '',

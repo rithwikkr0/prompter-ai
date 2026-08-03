@@ -1181,6 +1181,14 @@
         return;
       }
 
+      // Prompt Safety Scanner
+      var SENSITIVE_REGEX = /(?:sk-[a-zA-Z0-9]{20,}|AIzaSy[a-zA-Z0-9_-]{33}|gsk_[a-zA-Z0-9]{30,}|Bearer\s+[a-zA-Z0-9._-]{20,}|(?:password|secret|api_key|access_token)\s*[:=]\s*["']?[a-zA-Z0-9._-]{8,})/i;
+      if (cfg.safetyChecksEnabled !== false && SENSITIVE_REGEX.test(prompt)) {
+        if (!confirm('⚠️ Security Warning:\n\nPossible API Key, Secret Token, or Password detected in your prompt text.\n\nAre you sure you want to proceed sending this to ' + provider.toUpperCase() + '?')) {
+          return;
+        }
+      }
+
       _busy = true;
       S.isFavorite = false;
       S.showingDiff = false;
@@ -1209,6 +1217,7 @@
         apiKey: apiKey,
         model: model,
         provider: provider,
+        targetProfile: cfg.targetProfile || provider,
         fullAnalysis: true,
         conversationContext: convCtx,
         action: action,
@@ -1228,7 +1237,21 @@
           return;
         }
         if (!resp) { _showError('Background service unavailable. Try reloading the page.'); return; }
-        if (!resp.success) { _showError(resp.error || 'Enhancement failed. Please check your API key in Settings.'); return; }
+        if (!resp.success) {
+          var altProvider = provider === 'gemini' ? 'groq' : 'gemini';
+          var altKey = (cfg.providerKeys && cfg.providerKeys[altProvider]) || '';
+          if (altKey) {
+            if (confirm('⚠️ Provider ' + provider.toUpperCase() + ' Error:\n' + resp.error + '\n\nWould you like to retry automatically using ' + altProvider.toUpperCase() + '?')) {
+              cfg.provider = altProvider;
+              chrome.storage.local.set({ prompter_settings: cfg }, function() {
+                _doEnhance(prompt, action, contextAnnotation, interviewUsed, skipInterview);
+              });
+              return;
+            }
+          }
+          _showError(resp.error || 'Enhancement failed. Please check your API key in Settings.');
+          return;
+        }
 
         // If the model recommends dynamic interview questions and we are not skipping them, transition to the interview wizard!
         if (!skipInterview && resp.result && resp.result.interviewQuestions && resp.result.interviewQuestions.length > 0) {
