@@ -45,16 +45,17 @@ export function ShortcutsPage() {
           {shortcuts.map((s) => (
             <div
               key={s.keys}
-              className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/10 border border-slate-700/10 hover:border-slate-600/20 transition-all duration-200"
+              className="flex items-center justify-between p-3.5 rounded-2xl transition-all duration-200"
+              style={{ background: 'var(--bg-muted)', border: '1px solid var(--border)' }}
             >
               <div className="text-xs">
-                <span className="font-semibold text-slate-200 block mb-0.5">{s.action}</span>
-                <span className="text-slate-400 text-[10px]">Mac option: {s.mac}</span>
+                <span className="font-semibold block mb-0.5" style={{ color: 'var(--text-primary)' }}>{s.action}</span>
+                <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Mac option: {s.mac}</span>
               </div>
               <div className="flex items-center gap-2">
                 <code
                   onClick={() => handleCopy(s.keys)}
-                  className="text-xs px-2.5 py-1.5 rounded-xl font-mono cursor-pointer transition-colors hover:bg-slate-700/40"
+                  className="text-xs px-2.5 py-1.5 rounded-xl font-mono cursor-pointer transition-colors"
                   style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
                   title="Click to copy shortcut"
                 >
@@ -68,13 +69,17 @@ export function ShortcutsPage() {
 
       {/* Configuration Links */}
       <div className="glass-card-static p-5 space-y-3">
-        <h3 className="text-sm font-semibold text-slate-200">Custom Shortcuts</h3>
-        <p className="text-xs text-slate-400 leading-relaxed">
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Custom Shortcuts</h3>
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
           Google Chrome allows you to globally configure or bind custom keyboard combinations to extension commands.
         </p>
         <div className="flex items-center gap-2 pt-1">
           <button
-            onClick={() => window.open('chrome://extensions/shortcuts', '_blank')}
+            onClick={() => {
+              if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+                chrome.runtime.sendMessage({ type: 'OPEN_SHORTCUTS_PAGE' });
+              }
+            }}
             className="btn-primary text-xs py-2 px-4"
           >
             <ExternalLink size={13} /> Bind Custom Keys

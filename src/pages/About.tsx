@@ -40,7 +40,7 @@ export function AboutPage() {
           <span className="gradient-text">Prompter AI</span>
         </h1>
         <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
-          Version 1.0.0 · MVP
+          Version 2.1.0 · Google Builder Series 2026
         </p>
         <p className="text-sm leading-relaxed max-w-md mx-auto" style={{ color: 'var(--text-secondary)' }}>
           The world's most intelligent prompt engineering assistant. Transform vague AI prompts

@@ -10,6 +10,7 @@ import type { HistoryEntry } from '../types';
 import { timeAgo, truncate, copyToClipboard, downloadFile, scoreToColor } from '../utils/nanoid';
 import { useEnhancement } from '../contexts';
 import { useNavigate } from 'react-router-dom';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 export function HistoryPage() {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
@@ -19,6 +20,7 @@ export function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const { loadResult } = useEnhancement();
   const navigate = useNavigate();
 
@@ -68,7 +70,11 @@ export function HistoryPage() {
   };
 
   const handleClearAll = async () => {
-    if (!window.confirm('Clear all history? This cannot be undone.')) return;
+    setConfirmOpen(true);
+  };
+
+  const doConfirmClear = async () => {
+    setConfirmOpen(false);
     await storage.clearHistory();
     setEntries([]);
   };
@@ -247,6 +253,16 @@ export function HistoryPage() {
           </div>
         </AnimatePresence>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Clear All History"
+        message="This will permanently delete all your saved prompts and cannot be undone."
+        confirmLabel="Clear All"
+        cancelLabel="Keep History"
+        onConfirm={doConfirmClear}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }

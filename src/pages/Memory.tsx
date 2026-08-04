@@ -4,6 +4,7 @@ import { Brain, Save, RotateCcw, Download, Upload, Plus, Trash2, CheckCircle, Sp
 import { toast } from 'sonner';
 import { storage } from '../storage';
 import type { UserMemory } from '../types';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 const DEFAULT_MEMORY: UserMemory = {
   preferredProvider: 'gemini',
@@ -25,6 +26,7 @@ export function MemoryPage() {
   const [memory, setMemory] = useState<UserMemory>(DEFAULT_MEMORY);
   const [newRule, setNewRule] = useState('');
   const [loading, setLoading] = useState(true);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     storage.getMemory().then((mem) => {
@@ -87,11 +89,14 @@ export function MemoryPage() {
   };
 
   const handleReset = async () => {
-    if (confirm('Reset all AI Prompt Memory preferences to defaults?')) {
-      await storage.resetMemory();
-      setMemory(DEFAULT_MEMORY);
-      toast.success('AI Memory reset to default');
-    }
+    setConfirmOpen(true);
+  };
+
+  const doConfirmReset = async () => {
+    setConfirmOpen(false);
+    await storage.resetMemory();
+    setMemory(DEFAULT_MEMORY);
+    toast.success('AI Memory reset to default');
   };
 
   if (loading) return null;
@@ -280,6 +285,16 @@ export function MemoryPage() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Reset AI Memory"
+        message="This will reset all your AI Prompt Memory preferences back to defaults. Your custom rules will be cleared."
+        confirmLabel="Reset to Defaults"
+        cancelLabel="Keep Memory"
+        onConfirm={doConfirmReset}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }

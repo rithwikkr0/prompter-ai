@@ -3,10 +3,12 @@ import { motion } from 'framer-motion';
 import { TrendingUp, Sparkles, Award, Cpu, BarChart2, Star, Calendar, RefreshCcw } from 'lucide-react';
 import { storage } from '../storage';
 import type { AnalyticsEntry } from '../types';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 export function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [stats, setStats] = useState({
     total: 0,
     avgScore: 0,
@@ -82,7 +84,11 @@ export function AnalyticsPage() {
   }, []);
 
   const handleClear = async () => {
-    if (!window.confirm('Clear all analytics data? This will reset metrics.')) return;
+    setConfirmOpen(true);
+  };
+
+  const doConfirmClear = async () => {
+    setConfirmOpen(false);
     await storage.clearAnalytics();
     setData([]);
   };
@@ -128,8 +134,8 @@ export function AnalyticsPage() {
                 <Sparkles size={20} />
               </div>
               <div>
-                <span className="text-xs text-slate-400 block">Total Enhancements</span>
-                <span className="text-2xl font-bold text-slate-100">{stats.total}</span>
+                <span className="text-xs block" style={{ color: 'var(--text-muted)' }}>Total Enhancements</span>
+                <span className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{stats.total}</span>
               </div>
             </div>
 
@@ -138,8 +144,8 @@ export function AnalyticsPage() {
                 <Award size={20} />
               </div>
               <div>
-                <span className="text-xs text-slate-400 block">Average Quality Score</span>
-                <span className="text-2xl font-bold text-slate-100">{stats.avgScore}/100</span>
+                <span className="text-xs block" style={{ color: 'var(--text-muted)' }}>Average Quality Score</span>
+                <span className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{stats.avgScore}/100</span>
               </div>
             </div>
 
@@ -148,9 +154,9 @@ export function AnalyticsPage() {
                 <Cpu size={20} />
               </div>
               <div>
-                <span className="text-xs text-slate-400 block">Top Provider / Platform</span>
-                <span className="text-sm font-semibold text-slate-100 block capitalize">{stats.topProvider}</span>
-                <span className="text-[10px] text-slate-400">on {stats.topPlatform}</span>
+                <span className="text-xs block" style={{ color: 'var(--text-muted)' }}>Top Provider / Platform</span>
+                <span className="text-sm font-semibold block capitalize" style={{ color: 'var(--text-primary)' }}>{stats.topProvider}</span>
+                <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>on {stats.topPlatform}</span>
               </div>
             </div>
           </div>
@@ -166,16 +172,16 @@ export function AnalyticsPage() {
               {stats.dailyCounts.map((d, i) => {
                 const max = Math.max(...stats.dailyCounts.map(x => x.count), 1);
                 const heightPercent = (d.count / max) * 100;
-                return (
-                  <div key={d.date} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
-                    <div className="text-[10px] font-semibold text-slate-300 mb-1">{d.count}</div>
-                    <div
-                      style={{ height: `${Math.max(heightPercent, 5)}%`, background: 'linear-gradient(to top, #4285F4, #9333EA)' }}
-                      className="w-full rounded-t-lg transition-all duration-500 hover:brightness-110"
-                    />
-                    <div className="text-[9px] text-slate-400 uppercase tracking-wider">{d.date}</div>
-                  </div>
-                );
+                  return (
+                    <div key={d.date} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
+                      <div className="text-[10px] font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>{d.count}</div>
+                      <div
+                        style={{ height: `${Math.max(heightPercent, 5)}%`, background: 'linear-gradient(to top, #4285F4, #9333EA)' }}
+                        className="w-full rounded-t-lg transition-all duration-500 hover:brightness-110"
+                      />
+                      <div className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{d.date}</div>
+                    </div>
+                  );
               })}
             </div>
           </div>
@@ -187,17 +193,17 @@ export function AnalyticsPage() {
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Intent Category</span>
+                <span className="text-xs font-semibold uppercase tracking-wider block mb-1" style={{ color: 'var(--text-muted)' }}>Intent Category</span>
                 {Object.keys(stats.categoryCounts).map(cat => {
                   const count = stats.categoryCounts[cat];
                   const percentage = Math.round((count / stats.total) * 100);
                   return (
                     <div key={cat} className="space-y-1">
-                      <div className="flex justify-between text-xs font-medium text-slate-300">
+                      <div className="flex justify-between text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
                         <span className="capitalize">{cat}</span>
                         <span>{percentage}% ({count})</span>
                       </div>
-                      <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                      <div className="h-2 w-full rounded-full overflow-hidden" style={{ background: 'var(--bg-muted)' }}>
                         <div className="h-full bg-blue-500 rounded-full" style={{ width: `${percentage}%` }} />
                       </div>
                     </div>
@@ -206,18 +212,18 @@ export function AnalyticsPage() {
               </div>
 
               <div className="space-y-4 flex flex-col justify-center">
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/20 border border-slate-700/20">
+                <div className="flex items-center justify-between p-3 rounded-2xl" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border)' }}>
                   <div className="text-xs">
-                    <span className="font-semibold block text-slate-200">Replaced Prompts</span>
-                    <span className="text-slate-400 text-[10px]">Percentage of prompt updates accepted</span>
+                    <span className="font-semibold block" style={{ color: 'var(--text-primary)' }}>Replaced Prompts</span>
+                    <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Percentage of prompt updates accepted</span>
                   </div>
                   <span className="text-lg font-bold text-green-500">{stats.improvedPercent}%</span>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/20 border border-slate-700/20">
+                <div className="flex items-center justify-between p-3 rounded-2xl" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border)' }}>
                   <div className="text-xs">
-                    <span className="font-semibold block text-slate-200">Interview Mode Used</span>
-                    <span className="text-slate-400 text-[10px]">Prompts requiring detailed clarification</span>
+                    <span className="font-semibold block" style={{ color: 'var(--text-primary)' }}>Interview Mode Used</span>
+                    <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Prompts requiring detailed clarification</span>
                   </div>
                   <span className="text-lg font-bold text-purple-500">{stats.interviewPercent}%</span>
                 </div>
@@ -226,6 +232,16 @@ export function AnalyticsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Reset All Metrics"
+        message="This will permanently clear all usage analytics and quality scores."
+        confirmLabel="Reset Metrics"
+        cancelLabel="Keep Data"
+        onConfirm={doConfirmClear}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }

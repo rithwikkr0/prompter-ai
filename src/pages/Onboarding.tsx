@@ -323,7 +323,7 @@ export function OnboardingPage() {
 
       {/* Version tag */}
       <p className="mt-6 text-xs z-10" style={{ color: 'var(--text-muted)' }}>
-        Prompter AI v1.0 · Google Builder Series 2026
+        Prompter AI v2.1.0 · Google Builder Series 2026
       </p>
     </div>
   );

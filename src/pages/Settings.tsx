@@ -373,7 +373,11 @@ export function SettingsPage() {
           Customize keyboard shortcuts in{' '}
           <span
             className="text-primary-500 hover:underline cursor-pointer"
-            onClick={() => window.open('chrome://extensions/shortcuts', '_blank')}
+            onClick={() => {
+              if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+                chrome.runtime.sendMessage({ type: 'OPEN_SHORTCUTS_PAGE' });
+              }
+            }}
           >
             chrome://extensions/shortcuts
           </span>

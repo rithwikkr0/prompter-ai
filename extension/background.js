@@ -123,6 +123,12 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
     return false;
   }
 
+  // ── Open chrome://extensions/shortcuts (only possible from background) ──
+  if (message.type === 'OPEN_SHORTCUTS_PAGE') {
+    chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+    return false;
+  }
+
   // ── Benchmark model prompt variations ──
   if (message.type === 'BENCHMARK_PROMPTS') {
     var bPrompt = message.prompt || '';
