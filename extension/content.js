@@ -492,6 +492,12 @@
             '<div id="pf-why-better-list" style="font-size:11px;color:rgba(255,255,255,0.55);line-height:1.5;display:flex;flex-direction:column;gap:4px"></div>' +
           '</div>' +
 
+          // v2.2 Contextual Intelligence: Assumptions Used
+          '<div id="pf-assumptions-card" class="pf-card" style="display:none;background:rgba(66,133,244,0.02);border-color:rgba(66,133,244,0.12)">' +
+            '<div class="pf-label" style="color:#93c5fd;margin-bottom:6px">✓ Assumptions Used (No Interruption)</div>' +
+            '<div id="pf-assumptions-list" style="font-size:10.5px;color:rgba(255,255,255,0.6);line-height:1.5;display:flex;flex-direction:column;gap:4px"></div>' +
+          '</div>' +
+
           // Enhanced prompt
           '<div class="pf-card">' +
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
@@ -652,6 +658,22 @@
         }).join('');
       } else {
         whyBetterCard.style.display = 'none';
+      }
+    }
+
+    var asmCard = document.getElementById('pf-assumptions-card');
+    var asmList = document.getElementById('pf-assumptions-list');
+    if (asmCard && asmList) {
+      if (result.assumptions && result.assumptions.length) {
+        asmCard.style.display = 'block';
+        asmList.innerHTML = result.assumptions.map(function (item) {
+          return '<div style="display:flex;gap:6px;align-items:start">' +
+            '<span style="color:#93c5fd;font-weight:bold">✓</span>' +
+            '<span>' + _esc(item.replace(/^[✓✓]\s*/, '')) + '</span>' +
+            '</div>';
+        }).join('');
+      } else {
+        asmCard.style.display = 'none';
       }
     }
 
@@ -1253,8 +1275,9 @@
           return;
         }
 
-        // If the model recommends dynamic interview questions and we are not skipping them, transition to the interview wizard!
-        if (!skipInterview && resp.result && resp.result.interviewQuestions && resp.result.interviewQuestions.length > 0) {
+        // v2.2 Contextual Intelligence Engine: Only trigger interview wizard if confidence is low (<60)
+        var confVal = (resp.result && resp.result.confidenceScore !== undefined) ? resp.result.confidenceScore : (resp.result && resp.result.intent ? resp.result.intent.confidence : 100);
+        if (!skipInterview && confVal < 60 && resp.result && resp.result.interviewQuestions && resp.result.interviewQuestions.length > 0) {
           _showInterview(resp.result.interviewQuestions, prompt, action, resp.result.intent.category || 'general');
           return;
         }

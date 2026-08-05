@@ -40,6 +40,7 @@ export type InterviewQuestion = z.infer<typeof InterviewQuestionSchema>;
 // ─── Enhancement Result ───────────────────────────────────────────────────────
 export const EnhancementResultSchema = z.object({
   qualityScore: z.number().min(0).max(100),
+  confidenceScore: z.number().min(0).max(100).optional(),
   scoreBreakdown: ScoreBreakdownSchema.optional(),
   intent: z.object({
     category: z.string(),
@@ -54,6 +55,8 @@ export const EnhancementResultSchema = z.object({
   interviewQuestions: z.array(InterviewQuestionSchema).optional(),
   whyBetter: z.array(z.string()).optional(),
   aiProfileUsed: z.string().optional(),
+  assumptions: z.array(z.string()).optional(),
+  entitiesDetected: z.array(z.string()).optional(),
 });
 export type EnhancementResult = z.infer<typeof EnhancementResultSchema>;
 

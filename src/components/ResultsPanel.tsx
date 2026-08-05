@@ -196,10 +196,71 @@ export function ResultsPanel() {
             </div>
             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
               Quality: <span style={{ color: scoreColor, fontWeight: 600 }}>{result.qualityScore}/100</span>
+              {result.confidenceScore !== undefined && (
+                <span className="ml-3">
+                  Reasoning Confidence: <span style={{ color: '#34A853', fontWeight: 600 }}>{result.confidenceScore}%</span>
+                </span>
+              )}
             </p>
           </div>
         </div>
       </motion.div>
+
+      {/* Recognized Tech Entities */}
+      {result.entitiesDetected && result.entitiesDetected.length > 0 && (
+        <motion.div variants={item} className="glass-card-static p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs">⚡</span>
+            <h3 className="font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              Recognized Entities (NER)
+            </h3>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {result.entitiesDetected.map((entity) => (
+              <span
+                key={entity}
+                className="text-xs px-2.5 py-1 rounded-lg font-mono font-semibold"
+                style={{
+                  background: 'rgba(66, 133, 244, 0.1)',
+                  color: '#60a5fa',
+                  border: '1px solid rgba(66, 133, 244, 0.2)',
+                }}
+              >
+                {entity}
+              </span>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Assumptions Used */}
+      {result.assumptions && result.assumptions.length > 0 && (
+        <motion.div variants={item} className="glass-card-static p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Check size={15} style={{ color: '#34A853' }} />
+            <h3 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
+              Assumptions Used (Contextual Reasoning)
+            </h3>
+            <span className="badge badge-success ml-auto">No Interruption Needed</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {result.assumptions.map((asm, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-2 text-xs p-2.5 rounded-xl font-medium"
+                style={{
+                  background: 'rgba(52, 168, 83, 0.08)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid rgba(52, 168, 83, 0.15)',
+                }}
+              >
+                <span className="text-success font-bold">✓</span>
+                <span>{asm.replace(/^✓\s*/, '')}</span>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* Missing Context */}
       {result.missingContext.length > 0 && (

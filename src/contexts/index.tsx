@@ -139,7 +139,7 @@ export function EnhancementProvider({ children }: { children: ReactNode }) {
         error: (e as Error).message,
       }));
     }
-  }, [state.currentPrompt, settings.apiKey, settings.preferredModel]);
+  }, [state.currentPrompt, settings.apiKey, settings.preferredModel, settings.provider, settings.providerKeys, settings.providerModels]);
 
   const clearResult = useCallback(() => {
     setState({ status: 'idle', currentPrompt: '', result: null, error: null });
