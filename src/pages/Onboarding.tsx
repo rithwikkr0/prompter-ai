@@ -293,18 +293,28 @@ export function OnboardingPage() {
                 You're all set!
               </h2>
               <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
-                Navigate to any AI platform, type a prompt, and click the <strong>✨</strong> floating button to enhance it instantly.
+                {typeof (globalThis as unknown as { chrome?: { runtime?: { sendMessage?: unknown } } }).chrome?.runtime?.sendMessage === 'function'
+                  ? <>Navigate to any AI platform, type a prompt, and click the <strong>✨</strong> floating button to enhance it instantly.</>
+                  : <>Type your prompt in the Dashboard, click <strong>Enhance</strong>, and copy the improved result into any AI platform.</>
+                }
               </p>
 
               <div className="glass-card-static p-4 mb-6 text-left space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>
                   Quick shortcuts
                 </p>
-                {[
-                  { key: 'Ctrl+Shift+E', action: 'Enhance current prompt' },
-                  { key: 'Right-click', action: 'Enhance / Rewrite / Analyze' },
-                  { key: '✨ button', action: 'Click to enhance, right-click for more' },
-                ].map(({ key, action }) => (
+                {(typeof (globalThis as unknown as { chrome?: { runtime?: { sendMessage?: unknown } } }).chrome?.runtime?.sendMessage === 'function'
+                  ? [
+                      { key: 'Ctrl+Shift+E', action: 'Enhance current prompt' },
+                      { key: 'Right-click', action: 'Enhance / Rewrite / Analyze' },
+                      { key: '✨ button', action: 'Click to enhance, right-click for more' },
+                    ]
+                  : [
+                      { key: 'Ctrl+K', action: 'Open command palette' },
+                      { key: 'Enter / Button', action: 'Enhance your prompt' },
+                      { key: 'Settings', action: 'Configure API keys & models' },
+                    ]
+                ).map(({ key, action }) => (
                   <div key={key} className="flex items-center justify-between">
                     <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{action}</span>
                     <code className="text-xs px-2 py-0.5 rounded-lg font-mono"

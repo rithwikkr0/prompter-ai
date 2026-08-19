@@ -5,7 +5,9 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: './',
+  // Use '/prompter-ai/' for GitHub Pages (must match your repo name).
+  // For local dev or custom domains, change to '/'
+  base: '/prompter-ai/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -15,16 +17,5 @@ export default defineConfig({
     outDir: 'dist',
     target: 'es2020',
     sourcemap: false,
-    rollupOptions: {
-      output: {
-        // Deterministic filenames so popup.html can hard-code them
-        entryFileNames: 'assets/index.js',
-        chunkFileNames: 'assets/[name].js',
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.name?.endsWith('.css')) return 'assets/index.css';
-          return 'assets/[name][extname]';
-        },
-      },
-    },
   },
 });
